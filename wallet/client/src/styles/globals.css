@@ -1,0 +1,247 @@
+@import "./animations.css";
+
+
+@import 
+url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=JetBrains+Mono:wght@400;500;600&display=swap'); 
+/* ─── DESIGN TOKENS 
+─────────────────────────────────────────────────── */ :root { 
+/* Base palette — Zerion deep navy-black */ --bg-base: #0a0a10; 
+--bg-card: #13131f; --bg-card-hover: #1a1a2a; --bg-elevated: 
+#1e1e2e; --bg-overlay: rgba(13, 13, 18, 0.85); /* Glass system 
+*/ --glass-bg: rgba(19, 19, 31, 0.7); --glass-border: rgba(255, 
+255, 255, 0.06); --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 
+inset 0 1px 0 rgba(255,255,255,0.05); /* Brand accent — electric 
+cyan */ --accent: #00d4ff; --accent-dim: rgba(0, 212, 255, 
+0.12); --accent-glow: 0 0 32px rgba(0, 212, 255, 0.25); /* 
+Semantic colors */ --green: #00e87a; --green-dim: rgba(0, 232, 
+122, 0.12); --red: #ff4d6a; --red-dim: rgba(255, 77, 106, 0.12); 
+--amber: #ffb547; --amber-dim: rgba(255, 181, 71, 0.12); /* Text 
+hierarchy */ --text-primary: #ffffff; --text-secondary: 
+rgba(255, 255, 255, 0.55); --text-tertiary: rgba(255, 255, 255, 
+0.3); --text-accent: var(--accent); /* Borders */ --border: 
+rgba(255, 255, 255, 0.08); --border-hover: rgba(255, 255, 255, 
+0.15); --border-accent: rgba(0, 212, 255, 0.3); /* Chain colors 
+*/ --chain-eth: #627eea; --chain-polygon: #8247e5; 
+--chain-arbitrum: #2d9cdb; --chain-base: #0052ff; 
+--chain-optimism: #ff0420; --chain-solana: #9945ff; /* Spacing 
+*/ --space-xs: 4px; --space-sm: 8px; --space-md: 16px; 
+--space-lg: 24px; --space-xl: 32px; --space-2xl: 48px; 
+--space-3xl: 64px; /* Radius */ --radius-sm: 8px; --radius-md: 
+12px; --radius-lg: 16px; --radius-xl: 24px; --radius-pill: 
+9999px; /* Typography */ --font-display: 'Bebas Neue', 
+sans-serif; /* Tesla DNA — giant headlines */ --font-body: 'DM 
+Sans', sans-serif; /* Zerion DNA — clean UI */ --font-mono: 
+'JetBrains Mono', monospace; /* Zerion DNA — data/addresses */ 
+/* Transitions */ --transition-fast: 150ms cubic-bezier(0.4, 0, 
+0.2, 1); --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1); 
+--transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1); 
+--transition-spring: 350ms cubic-bezier(0.34, 1.56, 0.64, 1); /* 
+Layout */ --sidebar-width: 240px; --nav-height: 64px; 
+--mobile-tabs: 64px; --content-max: 1280px; } /* ─── RESET 
+─────────────────────────────────────────────────────────── */ 
+*, *::before, *::after { box-sizing: border-box; margin: 0; 
+padding: 0; } html { font-size: 16px; scroll-behavior: smooth; 
+-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: 
+grayscale; } body { background: var(--bg-base); color: 
+var(--text-primary); font-family: var(--font-body); font-size: 
+15px; line-height: 1.5; min-height: 100dvh; overflow-x: hidden; 
+} #root { min-height: 100dvh; display: flex; flex-direction: 
+column; } /* ─── SCROLLBAR 
+─────────────────────────────────────────────────────── */ 
+::-webkit-scrollbar { width: 4px; height: 4px; } 
+::-webkit-scrollbar-track { background: transparent; } 
+::-webkit-scrollbar-thumb { background: var(--border); 
+border-radius: var(--radius-pill); } 
+::-webkit-scrollbar-thumb:hover { background: 
+var(--border-hover); } /* ─── TYPOGRAPHY 
+────────────────────────────────────────────────────── */ 
+.display-hero { font-family: var(--font-display); font-size: 
+clamp(64px, 12vw, 160px); line-height: 0.9; letter-spacing: 
+0.02em; text-transform: uppercase; color: var(--text-primary); } 
+.display-section { font-family: var(--font-display); font-size: 
+clamp(40px, 7vw, 96px); line-height: 0.92; letter-spacing: 
+0.02em; text-transform: uppercase; } .display-card { 
+font-family: var(--font-display); font-size: clamp(28px, 4vw, 
+48px); letter-spacing: 0.02em; text-transform: uppercase; } 
+.label-eyebrow { font-family: var(--font-body); font-size: 11px; 
+font-weight: 600; letter-spacing: 0.12em; text-transform: 
+uppercase; color: var(--text-secondary); } .mono-value { 
+font-family: var(--font-mono); font-variant-numeric: 
+tabular-nums; font-weight: 600; } .mono-address { font-family: 
+var(--font-mono); font-size: 12px; font-weight: 400; color: 
+var(--text-secondary); } /* ─── LAYOUT UTILITIES 
+──────────────────────────────────────────────── */ .flex { 
+display: flex; } .flex-col { display: flex; flex-direction: 
+column; } .items-center { align-items: center; } 
+.justify-between { justify-content: space-between; } 
+.justify-center { justify-content: center; } .gap-xs { gap: 
+var(--space-xs); } .gap-sm { gap: var(--space-sm); } .gap-md { 
+gap: var(--space-md); } .gap-lg { gap: var(--space-lg); } 
+.gap-xl { gap: var(--space-xl); } .w-full { width: 100%; } 
+.h-full { height: 100%; } /* ─── GLASS CARD 
+────────────────────────────────────────────────────── */ .card 
+{ background: var(--glass-bg); border: 1px solid 
+var(--glass-border); border-radius: var(--radius-lg); 
+box-shadow: var(--glass-shadow); backdrop-filter: blur(16px); 
+-webkit-backdrop-filter: blur(16px); transition: border-color 
+var(--transition-base), box-shadow var(--transition-base); } 
+.card:hover { border-color: var(--border-hover); } 
+.card-elevated { background: var(--bg-elevated); border: 1px 
+solid var(--border); border-radius: var(--radius-lg); } /* ─── 
+BUTTONS 
+───────────────────────────────────────────────────────── */ 
+.btn { display: inline-flex; align-items: center; 
+justify-content: center; gap: var(--space-sm); font-family: 
+var(--font-body); font-size: 14px; font-weight: 600; border: 
+none; cursor: pointer; border-radius: var(--radius-pill); 
+padding: 12px 28px; transition: all var(--transition-base); 
+white-space: nowrap; text-decoration: none; position: relative; 
+overflow: hidden; } .btn::before { content: ''; position: 
+absolute; inset: 0; opacity: 0; transition: opacity 
+var(--transition-fast); background: rgba(255,255,255,0.08); } 
+.btn:hover::before { opacity: 1; } .btn:active { transform: 
+scale(0.97); } .btn-primary { background: var(--accent); color: 
+#000; } .btn-primary:hover { box-shadow: var(--accent-glow); } 
+.btn-ghost { background: transparent; color: 
+var(--text-primary); border: 1px solid var(--border); } 
+.btn-ghost:hover { border-color: var(--border-hover); } 
+.btn-danger { background: var(--red-dim); color: var(--red); 
+border: 1px solid rgba(255, 77, 106, 0.2); } .btn-danger:hover { 
+background: rgba(255, 77, 106, 0.2); } .btn-sm { font-size: 
+12px; padding: 8px 16px; } .btn-icon { padding: 10px; 
+border-radius: var(--radius-md); aspect-ratio: 1; } /* ─── CHAIN 
+BADGE ───────────────────────────────────────────────────── */ 
+.chain-badge { display: inline-flex; align-items: center; gap: 
+4px; padding: 3px 8px; border-radius: var(--radius-pill); 
+font-size: 11px; font-weight: 600; font-family: 
+var(--font-body); letter-spacing: 0.04em; } .chain-dot { width: 
+6px; height: 6px; border-radius: 50%; flex-shrink: 0; } 
+.chain-eth { background: rgba(98, 126, 234, 0.15); color: 
+var(--chain-eth); } .chain-eth .chain-dot { background: 
+var(--chain-eth); } .chain-polygon { background: rgba(130, 71, 
+229, 0.15); color: var(--chain-polygon); } .chain-polygon 
+.chain-dot { background: var(--chain-polygon); } .chain-arbitrum 
+{ background: rgba(45, 156, 219, 0.15); color: 
+var(--chain-arbitrum); } .chain-arbitrum .chain-dot { 
+background: var(--chain-arbitrum); } .chain-base { background: 
+rgba(0, 82, 255, 0.15); color: var(--chain-base); } .chain-base 
+.chain-dot { background: var(--chain-base); } .chain-optimism { 
+background: rgba(255, 4, 32, 0.12); color: 
+var(--chain-optimism); } .chain-optimism .chain-dot { 
+background: var(--chain-optimism); } .chain-solana { background: 
+rgba(153, 69, 255, 0.15); color: var(--chain-solana); } 
+.chain-solana .chain-dot { background: var(--chain-solana); } /* 
+─── TOKEN ROW 
+─────────────────────────────────────────────────────── */ 
+.token-row { display: flex; align-items: center; gap: 
+var(--space-md); padding: 14px var(--space-lg); border-radius: 
+var(--radius-md); transition: background var(--transition-fast); 
+cursor: default; } .token-row:hover { background: 
+rgba(255,255,255,0.03); } .token-icon { width: 40px; height: 
+40px; border-radius: 50%; background: var(--bg-elevated); 
+border: 1px solid var(--border); display: flex; align-items: 
+center; justify-content: center; font-size: 16px; flex-shrink: 
+0; overflow: hidden; } .token-info { flex: 1; min-width: 0; } 
+.token-name { font-size: 14px; font-weight: 600; color: 
+var(--text-primary); } .token-meta { font-size: 12px; color: 
+var(--text-secondary); display: flex; align-items: center; gap: 
+6px; margin-top: 2px; } .token-values { text-align: right; } 
+.token-usd { font-family: var(--font-mono); font-size: 14px; 
+font-weight: 600; font-variant-numeric: tabular-nums; } 
+.token-balance { font-size: 12px; color: var(--text-secondary); 
+font-family: var(--font-mono); font-variant-numeric: 
+tabular-nums; margin-top: 2px; } /* ─── PNL INDICATORS 
+────────────────────────────────────────────────── */ 
+.pnl-positive { color: var(--green); } .pnl-negative { color: 
+var(--red); } .pnl-neutral { color: var(--text-secondary); } 
+.pnl-badge { display: inline-flex; align-items: center; gap: 
+3px; padding: 2px 8px; border-radius: var(--radius-pill); 
+font-size: 12px; font-weight: 600; font-family: 
+var(--font-mono); font-variant-numeric: tabular-nums; } 
+.pnl-badge.positive { background: var(--green-dim); color: 
+var(--green); } .pnl-badge.negative { background: 
+var(--red-dim); color: var(--red); } /* ─── STAT RAIL (Tesla 
+DNA) ─────────────────────────────────────────── */ .stat-rail { 
+display: flex; align-items: center; gap: 0; } .stat-rail-item { 
+padding: 16px var(--space-xl); border-right: 1px solid 
+var(--border); flex: 1; } .stat-rail-item:first-child { 
+padding-left: 0; } .stat-rail-item:last-child { border-right: 
+none; } .stat-rail-value { font-family: var(--font-mono); 
+font-size: 22px; font-weight: 600; font-variant-numeric: 
+tabular-nums; color: var(--text-primary); line-height: 1; } 
+.stat-rail-label { font-size: 11px; font-weight: 500; 
+letter-spacing: 0.08em; text-transform: uppercase; color: 
+var(--text-secondary); margin-top: 4px; } /* ─── TOGGLE (Zerion 
+DNA) ───────────────────────────────────────────── */ 
+.toggle-track { width: 44px; height: 24px; border-radius: 
+var(--radius-pill); background: var(--bg-elevated); border: 1px 
+solid var(--border); position: relative; cursor: pointer; 
+transition: background var(--transition-spring), border-color 
+var(--transition-spring); flex-shrink: 0; } .toggle-track.on { 
+background: var(--accent-dim); border-color: 
+var(--border-accent); } .toggle-thumb { position: absolute; top: 
+3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; 
+background: var(--text-secondary); transition: transform 
+var(--transition-spring), background var(--transition-spring); } 
+.toggle-track.on .toggle-thumb { transform: translateX(20px); 
+background: var(--accent); } /* ─── PROGRESS / HEALTH BAR 
+─────────────────────────────────────────── */ .health-bar-track 
+{ width: 100%; height: 4px; background: var(--bg-elevated); 
+border-radius: var(--radius-pill); overflow: hidden; } 
+.health-bar-fill { height: 100%; border-radius: 
+var(--radius-pill); transition: width var(--transition-slow); } 
+/* ─── LIVE PULSE DOT 
+────────────────────────────────────────────────── */ .pulse-dot 
+{ width: 8px; height: 8px; border-radius: 50%; background: 
+var(--green); position: relative; flex-shrink: 0; } 
+.pulse-dot::before { content: ''; position: absolute; inset: 
+-3px; border-radius: 50%; background: var(--green); opacity: 
+0.3; animation: pulse 2s ease-in-out infinite; } @keyframes 
+pulse { 0%, 100% { transform: scale(1); opacity: 0.3; } 50% { 
+transform: scale(1.6); opacity: 0; } } /* ─── SKELETON LOADER 
+───────────────────────────────────────────────── */ .skeleton { 
+background: linear-gradient(90deg, var(--bg-card) 25%, 
+var(--bg-elevated) 50%, var(--bg-card) 75%); background-size: 
+200% 100%; animation: shimmer 1.5s infinite; border-radius: 
+var(--radius-sm); } @keyframes shimmer { 0% { 
+background-position: 200% 0; } 100% { background-position: -200% 
+0; } } /* ─── DIVIDER 
+───────────────────────────────────────────────────────── */ 
+.divider { width: 100%; height: 1px; background: var(--border); 
+} /* ─── SECTION SNAP (Tesla landing DNA) 
+─────────────────────────────── */ .snap-container { height: 
+100dvh; overflow-y: scroll; scroll-snap-type: y mandatory; 
+scroll-behavior: smooth; } .snap-section { height: 100dvh; 
+scroll-snap-align: start; scroll-snap-stop: always; position: 
+relative; display: flex; flex-direction: column; 
+justify-content: center; overflow: hidden; } /* ─── BACKGROUND 
+MESH ───────────────────────────────────────────────── */ 
+.bg-mesh { position: absolute; inset: 0; pointer-events: none; 
+z-index: 0; overflow: hidden; } .bg-mesh::before { content: ''; 
+position: absolute; width: 600px; height: 600px; border-radius: 
+50%; background: radial-gradient(circle, rgba(0, 212, 255, 0.08) 
+0%, transparent 70%); top: -200px; right: -100px; filter: 
+blur(60px); } .bg-mesh::after { content: ''; position: absolute; 
+width: 400px; height: 400px; border-radius: 50%; background: 
+radial-gradient(circle, rgba(0, 232, 122, 0.06) 0%, transparent 
+70%); bottom: -100px; left: 10%; filter: blur(60px); } /* ─── 
+ANIMATIONS 
+────────────────────────────────────────────────────── */ 
+@keyframes fadeInUp { from { opacity: 0; transform: 
+translateY(24px); } to { opacity: 1; transform: translateY(0); } 
+} @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } } 
+@keyframes slideInLeft { from { opacity: 0; transform: 
+translateX(-24px); } to { opacity: 1; transform: translateX(0); 
+} } .anim-fade-up { animation: fadeInUp 0.5s 
+var(--transition-base) both; } .anim-fade-in { animation: fadeIn 
+0.4s var(--transition-base) both; } .anim-slide-left { 
+animation: slideInLeft 0.4s var(--transition-base) both; } 
+.delay-1 { animation-delay: 0.1s; } .delay-2 { animation-delay: 
+0.2s; } .delay-3 { animation-delay: 0.3s; } .delay-4 { 
+animation-delay: 0.4s; } .delay-5 { animation-delay: 0.5s; } /* 
+─── MOBILE RESPONSIVE 
+─────────────────────────────────────────────── */ @media 
+(max-width: 768px) { .stat-rail { flex-direction: column; gap: 
+var(--space-sm); } .stat-rail-item { border-right: none; 
+border-bottom: 1px solid var(--border); padding: var(--space-sm) 
+0; } .stat-rail-item:last-child { border-bottom: none; } }

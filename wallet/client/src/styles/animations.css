@@ -1,0 +1,163 @@
+/* ─── ANIMATION LIBRARY ─────────────────────────────────────────────── */
+/* All animation utilities for the Wallet Intelligence Protocol UI       */
+
+/* ─── ENTRY ANIMATIONS ──────────────────────────────────────────────── */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(32px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideRight {
+  from { opacity: 0; transform: translateX(-32px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes popIn {
+  0%   { opacity: 0; transform: scale(0.8); }
+  60%  { transform: scale(1.04); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* ─── CONTINUOUS ANIMATIONS ─────────────────────────────────────────── */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%      { transform: translateY(-8px); }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50%      { opacity: 1; transform: scale(1.02); }
+}
+
+@keyframes gradientShift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes scanLine {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── NOTIFICATION / LOG ANIMATIONS ────────────────────────────────── */
+@keyframes logEntry {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+    max-height: 80px;
+  }
+}
+
+@keyframes toastSlide {
+  from { opacity: 0; transform: translateX(100%) scale(0.95); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes toastExit {
+  from { opacity: 1; transform: translateX(0) scale(1); }
+  to   { opacity: 0; transform: translateX(100%) scale(0.95); }
+}
+
+/* ─── INTERACTIVE ───────────────────────────────────────────────────── */
+@keyframes ripple {
+  0%   { transform: scale(0); opacity: 0.4; }
+  100% { transform: scale(4); opacity: 0; }
+}
+
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 0 rgba(0, 212, 255, 0); }
+  50%      { box-shadow: 0 0 32px rgba(0, 212, 255, 0.3); }
+}
+
+@keyframes borderPulse {
+  0%, 100% { border-color: rgba(255,255,255,0.08); }
+  50%      { border-color: rgba(0, 212, 255, 0.3); }
+}
+
+/* ─── UTILITY CLASSES ───────────────────────────────────────────────── */
+.animate-slide-up    { animation: slideUp 0.45s cubic-bezier(0.34, 1.1, 0.64, 1) both; }
+.animate-slide-down  { animation: slideDown 0.35s cubic-bezier(0.4, 0, 0.2, 1) both; }
+.animate-slide-right { animation: slideRight 0.45s cubic-bezier(0.34, 1.1, 0.64, 1) both; }
+.animate-scale-in    { animation: scaleIn 0.35s cubic-bezier(0.34, 1.1, 0.64, 1) both; }
+.animate-pop-in      { animation: popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.animate-float       { animation: float 4s ease-in-out infinite; }
+.animate-spin        { animation: spin 1s linear infinite; }
+.animate-breathe     { animation: breathe 3s ease-in-out infinite; }
+.animate-glow-pulse  { animation: glowPulse 2.5s ease-in-out infinite; }
+
+/* Stagger delays */
+.stagger-1  { animation-delay: 0.05s; }
+.stagger-2  { animation-delay: 0.10s; }
+.stagger-3  { animation-delay: 0.15s; }
+.stagger-4  { animation-delay: 0.20s; }
+.stagger-5  { animation-delay: 0.25s; }
+.stagger-6  { animation-delay: 0.30s; }
+.stagger-7  { animation-delay: 0.35s; }
+.stagger-8  { animation-delay: 0.40s; }
+
+/* ─── PAGE TRANSITION ───────────────────────────────────────────────── */
+.page-enter {
+  animation: slideUp 0.4s cubic-bezier(0.34, 1.1, 0.64, 1) both;
+}
+
+/* ─── LOADING STATES ────────────────────────────────────────────────── */
+.loading-ring {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255,255,255,0.1);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.loading-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  animation: breathe 1.4s ease-in-out infinite;
+}
+
+.loading-dots span:nth-child(2) { animation-delay: 0.16s; }
+.loading-dots span:nth-child(3) { animation-delay: 0.32s; }
+
+/* ─── HOVER EFFECTS ─────────────────────────────────────────────────── */
+.hover-lift {
+  transition: transform 0.25s cubic-bezier(0.34, 1.1, 0.64, 1),
+              box-shadow 0.25s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.hover-glow:hover {
+  box-shadow: var(--accent-glow);
+}
