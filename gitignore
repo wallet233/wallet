@@ -74,3 +74,5 @@ wallet/client/node_modules/
 
 # Optional: ignore build or dist outputs
 wallet/client/dist/
+wallet/client/dist
+walllet/client/node_modules/

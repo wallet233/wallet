@@ -28,16 +28,25 @@ rgba(255, 255, 255, 0.08); --border-hover: rgba(255, 255, 255,
 --space-lg: 24px; --space-xl: 32px; --space-2xl: 48px; 
 --space-3xl: 64px; /* Radius */ --radius-sm: 8px; --radius-md: 
 12px; --radius-lg: 16px; --radius-xl: 24px; --radius-pill: 
-9999px; /* Typography */ --font-display: 'Bebas Neue', 
-sans-serif; /* Tesla DNA — giant headlines */ --font-body: 'DM 
-Sans', sans-serif; /* Zerion DNA — clean UI */ --font-mono: 
-'JetBrains Mono', monospace; /* Zerion DNA — data/addresses */ 
+9999px; 
+
+/* Typography */ --font-display: 'Bebas Neue', 
+sans-serif; 
+
+/* Tesla DNA — giant headlines */ --font-body: 'DM Sans', sans-serif; 
+
+--font-mono: 'JetBrains Mono', monospace;
+
+/* Zerion DNA — data/addresses */ 
+
+
 /* Transitions */ --transition-fast: 150ms cubic-bezier(0.4, 0, 
 0.2, 1); --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1); 
 --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1); 
---transition-spring: 350ms cubic-bezier(0.34, 1.56, 0.64, 1); /* 
+--transition-spring: 350ms cubic-bezier(0.34, 1.56, 0.64, 1); 
+/* 
 Layout */ --sidebar-width: 240px; --nav-height: 64px; 
---mobile-tabs: 64px; --content-max: 1280px; } /* ─── RESET 
+--mobile-tabs: 64px; --content-max: 1280px; } /* ─ RESET 
 ─────────────────────────────────────────────────────────── */ 
 *, *::before, *::after { box-sizing: border-box; margin: 0; 
 padding: 0; } html { font-size: 16px; scroll-behavior: smooth; 

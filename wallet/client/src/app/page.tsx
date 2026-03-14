@@ -1,4 +1,5 @@
 
+ import { useState, useRef, useEffect } from 'react';
 
 const FEATURES = [
   {
@@ -29,7 +30,7 @@ const FEATURES = [
   id: 'pass',
   icon: '◉',
   title: 'NFT Pass',
-  desc: 'Hold the WIP Pass NFT for unlimited automation, batch burns, and priority processing.',
+  desc: 'Hold the Upcoming Pass NFT for unlimited automation, batch burns, and priority processing.',
   stat: '0 fees',
   statLabel: 'For pass holders',
   },
@@ -59,8 +60,6 @@ const FEATURES = [
   { id: 'solana', name: 'Solana' },
   ];
 
-  import { useState, useRef, useEffect } from 'react';
-
 export default function LandingPage() {
   const [activeSection, setActiveSection] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -86,21 +85,21 @@ export default function LandingPage() {
 
           return () => observer.disconnect();
   }, []);
-
-  return (
-    <div className="snap-container" ref={containerRef}>
-      {/* ── HERO SECTION ──────────────────────────────────────────── */}
+ 
+ return (
+  <div className="snap-container" ref={containerRef}>
+  { /* ── HERO SECTION ─────── */ }
       <section className="snap-section hero-section" data-index="0">
         <div className="bg-mesh" />
         <div className="hero-grid-bg" />
 
         <div className="hero-content">
-          {/* Eyebrow */}
-          <p className="label-eyebrow anim-fade-up delay-1">
+          /* Eyebrow */
+         <p className="label-eyebrow anim-fade-up delay-1">
             Wallet Intelligence Protocol
           </p>
 
-          {/* Giant Tesla-style headline */}
+         {/* Giant Tesla-style headline */}
           <h1 className="display-hero anim-fade-up delay-2">
             <span className="hero-line-1">CLEAN</span>
             <br />
@@ -111,8 +110,8 @@ export default function LandingPage() {
             <span className="hero-line-4">VALUE.</span>
           </h1>
 
-          {/* Tesla 2-CTA pattern */}
-          <div className="hero-ctas anim-fade-up delay-3">
+         { /* Tesla 2-CTA pattern */}
+        <div className="hero-ctas anim-fade-up delay-3">
             <button className="btn btn-primary">
               Connect Wallet
             </button>
@@ -122,7 +121,7 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Tesla stat rail at bottom */}
+       { /* Tesla stat rail at bottom */}
         <div className="hero-stat-rail anim-fade-up delay-4">
           <div className="stat-rail">
             <div className="stat-rail-item">
@@ -144,14 +143,14 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Scroll indicator */}
-        <div className="scroll-hint">
+       {/* Scroll indicator */}
+       <div className="scroll-hint">
           <div className="scroll-line" />
           <span className="label-eyebrow">scroll</span>
         </div>
       </section>
 
-      {/* ── FEATURES SECTION ─────────────────────────────────────── */}
+      {/* ── FEATURES SECTION ────── */}
       <section className="snap-section features-section" data-index="1">
         <div className="bg-mesh" style={{ '--mesh-color': 'rgba(0, 232, 122, 0.06)' } as React.CSSProperties} />
         <div className="section-inner">
@@ -177,7 +176,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── AUTOMATION SECTION ───────────────────────────────────── */}
+    {/* ── AUTOMATION SECTION ────── */}
       <section className="snap-section automation-section" data-index="2">
         <div className="section-inner two-col">
           <div className="section-copy">
@@ -196,7 +195,7 @@ export default function LandingPage() {
           </div>
 
           {/* Terminal log preview (Zerion DNA) */}
-          <div className="terminal-preview card">
+   /*       <div className="terminal-preview card">
             <div className="terminal-header">
               <div className="terminal-dot red" />
               <div className="terminal-dot amber" />
@@ -217,11 +216,11 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── HEALTH SCORE SECTION ─────────────────────────────────── */}
+      {/* ── HEALTH SCORE SECTION ───── */}
       <section className="snap-section health-section" data-index="3">
         <div className="section-inner two-col reverse">
-          {/* Zerion-style score display */}
-          <div className="score-display-wrapper">
+          /* Zerion-style score display */
+        <div className="score-display-wrapper">
             <div className="score-card card">
               <p className="label-eyebrow">Wallet Health Score</p>
               <div className="score-hero-value mono-value">
@@ -263,8 +262,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── CTA SECTION ──────────────────────────────────────────── */}
-      <section className="snap-section cta-section" data-index="4">
+      {/* ── CTA SECTION ───── */}
+     <section className="snap-section cta-section" data-index="4">
         <div className="bg-mesh" />
         <div className="cta-inner">
           <p className="label-eyebrow">Start Now</p>
@@ -292,8 +291,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── SECTION DOTS (Tesla-style indicator) ─────────────────── */}
-      <div className="section-dots">
+      {/* ── SECTION DOTS (Tesla-style indicator) ──── */}
+    <div className="section-dots">
         {[0,1,2,3,4].map(i => (
           <div
             key={i}
@@ -305,9 +304,12 @@ export default function LandingPage() {
   );
 }
 
-/* ─── PAGE STYLES ───────────────────────────────────────────────────── */
+/* ─── PAGE STYLES ───────── */
+
 const pageStyles = `
 /* ─── HERO ─── */
+/*
+
 .hero-section {
 background: var(--bg-base);
 align-items: flex-start;
@@ -376,7 +378,7 @@ background: var(--text-secondary);
 animation: float 2s ease-in-out infinite;
 }
 
-/* ─── SECTIONS ─── */
+/* ─── SECTIONS ─── 
 .section-inner {
 max-width: var(--content-max);
 width: 100%;
@@ -411,7 +413,7 @@ max-width: 480px;
 
 .section-ctas { display: flex; gap: var(--space-md); flex-wrap: wrap; }
 
-/* ─── FEATURES ─── */
+/* ─── FEATURES ─── 
 .features-section { background: var(--bg-base); }
 
 .features-grid {
@@ -465,7 +467,7 @@ border-top: 1px solid var(--border);
 font-size: 20px;
 }
 
-/* ─── TERMINAL ─── */
+/* ─── TERMINAL ─── 
 .automation-section { background: var(--bg-base); }
 
 .terminal-preview {
@@ -531,7 +533,7 @@ animation: breathe 1.2s ease-in-out infinite;
 margin-top: var(--space-sm);
 }
 
-/* ─── SCORE SECTION ─── */
+/* ─── SCORE SECTION ─── 
 .health-section { background: var(--bg-base); }
 
 .score-display-wrapper { flex: 1; }
@@ -580,7 +582,7 @@ gap: var(--space-md);
 .score-label { font-size: 13px; color: var(--text-secondary); }
 .score-pct   { font-size: 13px; font-family: var(--font-mono); text-align: right; }
 
-/* ─── CTA ─── */
+/* ─── CTA ─── 
 .cta-section {
 background: var(--bg-base);
 align-items: center;
@@ -610,7 +612,7 @@ max-width: 520px;
 
 .cta-chains { display: flex; gap: var(--space-sm); flex-wrap: wrap; justify-content: center; }
 
-/* ─── SECTION DOTS ─── */
+/* ─── SECTION DOTS ─── 
 .section-dots {
 position: fixed;
 right: var(--space-xl);
@@ -635,7 +637,7 @@ background: var(--accent);
 transform: scale(1.4);
 }
 
-/* ─── RESPONSIVE ── */
+/* ─── RESPONSIVE ── 
 @media (max-width: 1024px) {
 .features-grid { grid-template-columns: repeat(2, 1fr); }
 .section-inner.two-col,
@@ -660,4 +662,4 @@ useEffect(() => {
     style.textContent = pageStyles;
     document.head.appendChild(style);
                     }
-            }, []);
+            }, []);   

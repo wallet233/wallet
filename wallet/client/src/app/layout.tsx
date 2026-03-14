@@ -160,16 +160,6 @@ export default function Layout() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  if (isLanding) {
-    return (
-      <div className="landing-shell">
-        <TopNav scrolled={scrolled} walletAddress={walletAddress} />
-        <main>
-          <LandingPage />
-          </main>
-      </div>
-    );
-  }
 
   return (
     <div className="app-shell">
