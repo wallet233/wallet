@@ -68,3 +68,9 @@ coverage/
 
 # TypeScript build info
 *.tsbuildinfo
+
+# Ignore all node_modules folders
+wallet/client/node_modules/
+
+# Optional: ignore build or dist outputs
+wallet/client/dist/
