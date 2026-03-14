@@ -4,8 +4,9 @@ import '../../styles/globals.css';
 import '../../styles/animations.css';
 
 interface NavbarProps {
-  walletAddress: string | null;
-}
+   walletAddress: string | null;
+   isMobile?: boolean;
+        }
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard' },
@@ -17,18 +18,13 @@ const NAV_ITEMS = [
 export default function Navbar({ walletAddress }: NavbarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 1024);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 10);
     window.addEventListener('scroll', handleScroll);
 
-    const handleResize = () => setIsMobile(window.innerWidth <= 1024);
-    window.addEventListener('resize', handleResize);
-
     return () => {
-      window.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('scroll', handleScroll)
     };
   }, []);
 

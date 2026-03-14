@@ -5,7 +5,7 @@ import "../styles/globals.css";
 import "../styles/animations.css"; 
 import Navbar from '../components/layout/Navbar';
 import PageContainer from '../components/layout/PageContainer';
-import { useScreenSize } from '../hooks/useScreenSize'
+import { useScreenSize } from '../hooks/useScreenSize';
 
 // ─── NAV ICONS ───────────────────────────────────────────────────────
 const IconDashboard = () => (
@@ -123,7 +123,6 @@ export default function Layout() {
   const [walletAddress] = useState(null);
   const location = useLocation();
   const { isMobile } = useScreenSize();
-  const isLanding = location.pathname === '/';
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -136,7 +135,7 @@ export default function Layout() {
    <div className={isMobile ? 'mobile-mode app-shell' : 'desktop-mode app-shell'}>
    {!isMobile && <Sidebar walletAddress={walletAddress} />}
       <div className="main-content">
-          <Navbar scrolled={scrolled} walletAddress={walletAddress} />
+         <Navbar scrolled={scrolled} walletAddress={walletAddress} isMobile={isMobile} />
             <PageContainer>
                 <Outlet />
                   </PageContainer>
