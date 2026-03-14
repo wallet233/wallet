@@ -2,7 +2,11 @@ import { useState } from 'react';
 
 // ─── FILE: client/components/automation/AutoBurnToggle.tsx ───────────
 // Standalone auto-burn toggle with configurable threshold
-export default function AutoBurnToggle({ defaultOn = true, onChange }) {
+ interface AutoBurnToggleProps {
+    defaultOn?: boolean;
+      onChange?: (config: { enabled: boolean; threshold: string }) => void;
+      }
+export default function AutoBurnToggle({ defaultOn = true, onChange }: AutoBurnToggleProps) { 
   const [on, setOn] = useState(defaultOn);
   const [threshold, setThreshold] = useState('0.01');
 

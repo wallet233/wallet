@@ -1,0 +1,12 @@
+dist
+dist/
+build
+build/
+node_modules
+node
+node_modules/
+# Ignore all node_modules folders
+wallet/client/node_modules/
+
+# Optional: ignore build or dist outputs
+wallet/client/dist/

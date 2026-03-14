@@ -52,7 +52,7 @@ export default function AutomationPage() {
             <div className="rules-list">
               <AutoRecoveryToggle />
               <div className="divider" />
-              <AutoBurnToggle />
+              <AutoBurnToggle/>
               <div className="divider" />
               <AutoSweepRule />
               <div className="divider" />

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import LandingPage from './page';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import '../styles/globals.css';
 import '../styles/animations.css';
@@ -52,7 +53,7 @@ const NAV_ITEMS = [
 ];
 
 // ─── SIDEBAR COMPONENT ───────────────────────────────────────────────
-function Sidebar({ walletAddress }) {
+function Sidebar({ walletAddress }: { walletAddress: string | null }) {
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
@@ -96,7 +97,7 @@ function Sidebar({ walletAddress }) {
 }
 
 // ─── TOP NAVBAR ──────────────────────────────────────────────────────
-function TopNav({ scrolled, walletAddress }) {
+function TopNav({ scrolled, walletAddress }: { scrolled: boolean; walletAddress: string | null }) {
   return (
     <header className={`topnav ${scrolled ? 'scrolled' : ''}`}>
       <div className="topnav-inner">
@@ -149,7 +150,7 @@ function MobileTabBar() {
 // ─── ROOT LAYOUT ─────────────────────────────────────────────────────
 export default function Layout() {
   const [scrolled, setScrolled] = useState(false);
-  const [walletAddress] = useState(null); // connect real wallet later
+  const [walletAddress] = useState(null);
   const location = useLocation();
   const isLanding = location.pathname === '/';
 
@@ -164,8 +165,8 @@ export default function Layout() {
       <div className="landing-shell">
         <TopNav scrolled={scrolled} walletAddress={walletAddress} />
         <main>
-          <Outlet />
-        </main>
+          <LandingPage />
+          </main>
       </div>
     );
   }

@@ -1,7 +1,69 @@
-import { useEffect, useRef, useState } from 'react';
+
+
+const FEATURES = [
+  {
+  id: 'dust',
+  icon: '◈',
+  title: 'Dust Recovery',
+  desc: 'Aggregate micro-balances across every chain and recover them in a single batch transaction.',
+  stat: '$847',
+  statLabel: 'Avg recovered',
+  },
+  {
+  id: 'spam',
+  icon: '⬡',
+  title: 'Spam Detection',
+  desc: 'ML-powered scanner flags and burns unsolicited tokens with 99.2% accuracy.',
+  stat: '99.2%',
+  statLabel: 'Accuracy',
+  },
+  {
+  id: 'auto',
+  icon: '⟳',
+  title: 'Auto Clean',
+  desc: 'Set rules once. WIP monitors and cleans your wallet on autopilot, every block.',
+  stat: '24/7',
+  statLabel: 'Monitoring',
+  },
+  {
+  id: 'pass',
+  icon: '◉',
+  title: 'NFT Pass',
+  desc: 'Hold the WIP Pass NFT for unlimited automation, batch burns, and priority processing.',
+  stat: '0 fees',
+  statLabel: 'For pass holders',
+  },
+  ];
+
+  const MOCK_LOGS = [
+  { time: '14:23:01', type: 'success', label: 'BURNED', msg: '3 spam tokens on Base' },
+  { time: '14:22:47', type: 'accent', label: 'RECOVERED', msg: '$12.40 dust → ETH' },
+  { time: '14:21:03', type: 'warning', label: 'FLAGGED', msg: 'Suspicious airdrop detected' },
+  { time: '14:20:11', type: 'success', label: 'SWEPT', msg: '7 zero-value tokens removed' },
+  { time: '14:19:55', type: 'accent', label: 'SCORE', msg: 'Health score: 94 (+2)' },
+  ];
+
+  const SCORE_ITEMS = [
+  { label: 'Token Quality', pct: 96, color: 'var(--green)' },
+  { label: 'Dust Level', pct: 88, color: 'var(--accent)' },
+  { label: 'Gas Efficiency', pct: 92, color: 'var(--accent)' },
+  { label: 'Spam Index', pct: 99, color: 'var(--green)' },
+  ];
+
+  const CHAINS = [
+  { id: 'eth', name: 'Ethereum' },
+  { id: 'polygon', name: 'Polygon' },
+  { id: 'arbitrum', name: 'Arbitrum' },
+  { id: 'base', name: 'Base' },
+  { id: 'optimism', name: 'Optimism' },
+  { id: 'solana', name: 'Solana' },
+  ];
+
+  import { useState, useRef, useEffect } from 'react';
+
 export default function LandingPage() {
   const [activeSection, setActiveSection] = useState(0);
-  const containerRef = useRef(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -9,19 +71,20 @@ export default function LandingPage() {
 
     const observer = new IntersectionObserver(
       (entries) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            const idx = parseInt(entry.target.dataset.index || '0');
-            setActiveSection(idx);
+      entries.forEach(entry => {
+      if (entry.isIntersecting && entry.target instanceof HTMLElement) {
+      const idx = parseInt(entry.target.dataset.index || '0');
+      setActiveSection(idx);
           }
         });
       },
       { root: container, threshold: 0.5 }
     );
 
-    const sections = container.querySelectorAll('.snap-section');
-    sections.forEach(s => observer.observe(s));
-    return () => observer.disconnect();
+  const sections = container.querySelectorAll<HTMLElement>('.snap-section');
+      sections.forEach(s => observer.observe(s));
+
+          return () => observer.disconnect();
   }, []);
 
   return (
@@ -90,7 +153,7 @@ export default function LandingPage() {
 
       {/* ── FEATURES SECTION ─────────────────────────────────────── */}
       <section className="snap-section features-section" data-index="1">
-        <div className="bg-mesh" style={{ '--mesh-color': 'rgba(0, 232, 122, 0.06)' }} />
+        <div className="bg-mesh" style={{ '--mesh-color': 'rgba(0, 232, 122, 0.06)' } as React.CSSProperties} />
         <div className="section-inner">
           <p className="label-eyebrow">What We Do</p>
           <h2 className="display-section">
@@ -241,66 +304,6 @@ export default function LandingPage() {
     </div>
   );
 }
-
-// ─── MOCK DATA ─────
-const FEATURES = [
-  {
-    id: 'dust',
-    icon: '◈',
-    title: 'Dust Recovery',
-    desc: 'Aggregate micro-balances across every chain and recover them in a single batch transaction.',
-    stat: '$847',
-    statLabel: 'Avg recovered',
-  },
-  {
-    id: 'spam',
-    icon: '⬡',
-    title: 'Spam Detection',
-    desc: 'ML-powered scanner flags and burns unsolicited tokens with 99.2% accuracy.',
-    stat: '99.2%',
-    statLabel: 'Accuracy',
-  },
-  {
-    id: 'auto',
-    icon: '⟳',
-    title: 'Auto Clean',
-    desc: 'Set rules once. WIP monitors and cleans your wallet on autopilot, every block.',
-    stat: '24/7',
-    statLabel: 'Monitoring',
-  },
-  {
-    id: 'pass',
-    icon: '◉',
-    title: 'NFT Pass',
-    desc: 'Hold the WIP Pass NFT for unlimited automation, batch burns, and priority processing.',
-    stat: '0 fees',
-    statLabel: 'For pass holders',
-  },
-];
-
-const MOCK_LOGS = [
-  { time: '14:23:01', type: 'success', label: 'BURNED', msg: '3 spam tokens on Base' },
-  { time: '14:22:47', type: 'accent', label: 'RECOVERED', msg: '$12.40 dust → ETH' },
-  { time: '14:21:03', type: 'warning', label: 'FLAGGED', msg: 'Suspicious airdrop detected' },
-  { time: '14:20:11', type: 'success', label: 'SWEPT', msg: '7 zero-value tokens removed' },
-  { time: '14:19:55', type: 'accent', label: 'SCORE', msg: 'Health score: 94 (+2)' },
-];
-
-const SCORE_ITEMS = [
-  { label: 'Token Quality',   pct: 96, color: 'var(--green)' },
-  { label: 'Dust Level',      pct: 88, color: 'var(--accent)' },
-  { label: 'Gas Efficiency',  pct: 92, color: 'var(--accent)' },
-  { label: 'Spam Index',      pct: 99, color: 'var(--green)' },
-];
-
-const CHAINS = [
-  { id: 'eth', name: 'Ethereum' },
-  { id: 'polygon', name: 'Polygon' },
-  { id: 'arbitrum', name: 'Arbitrum' },
-  { id: 'base', name: 'Base' },
-  { id: 'optimism', name: 'Optimism' },
-  { id: 'solana', name: 'Solana' },
-];
 
 /* ─── PAGE STYLES ───────────────────────────────────────────────────── */
 const pageStyles = `
@@ -649,13 +652,12 @@ transform: scale(1.4);
 .cta-actions { flex-direction: column; align-items: center; }
 }
 `;
-
-if (typeof document !== 'undefined') {
-  const existing = document.getElementById('landing-styles');
-  if (!existing) {
+useEffect(() => {
+    const existing = document.getElementById('landing-styles');
+    if (!existing) {
     const style = document.createElement('style');
     style.id = 'landing-styles';
     style.textContent = pageStyles;
     document.head.appendChild(style);
-  }
-}
+                    }
+            }, []);
