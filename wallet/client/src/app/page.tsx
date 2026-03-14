@@ -321,7 +321,7 @@ const pageStyles = `
 /* ─── HERO ─── */
 
 .hero-section {
-background: yellow
+background: var(--bg-base);
 align-items: flex-start;
 padding-top: calc(var(--nav-height) + 80px);
 }

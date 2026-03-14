@@ -311,6 +311,82 @@ width: 400px; height: 400px; border-radius: 50%; background:
 radial-gradient(circle, rgba(0, 232, 122, 0.06) 0%, transparent 
 70%); bottom: -100px; left: 10%; filter: blur(60px); }
 
+.topnav {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1in 0;
+  height: var(--nav-height);
+  position: sticky;
+  top: 0;
+  background: var(--bg-base);
+  z-index: 100;
+       }
+.topnav-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    max-width: var(--content-max);
+    padding: 0 var(--space-xl);
+    }
+    .topnav-logo {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    }
+    .topnav-brand {
+    font-weight: 700;
+    letter-spacing: 1px;
+    font-size: 1rem;
+    text-align: center;
+    flex: 1;
+    }
+    .topnav-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    }
+    .topnav-links {
+    display: flex;
+    gap: var(--space-lg);
+    justify-content: center;
+    align-items: center;
+    }
+    .hamburger {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    width: 24px;
+    height: 20px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    }
+    .hamburger-line {
+    height: 2px;
+    width: 100%;
+    background: var(--text-primary);
+    }
+    .mobile-menu {
+    position: absolute;
+    top: calc(var(--nav-height) + 1in);
+    right: 0;
+    background: var(--bg-base);
+    width: 200px;
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-md);
+    gap: var(--space-sm);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .mobile-menu-item {
+    text-decoration: none;
+    font-weight: 600;
+    color: var(--text-primary);
+    }
+
+
  /* ─── ANIMATIONS ───────── */ 
 @keyframes fadeInUp { from { opacity: 0; transform: 
 translateY(24px); } to { opacity: 1; transform: translateY(0); } 
@@ -333,3 +409,12 @@ var(--space-sm); }
 border-bottom: 1px solid var(--border); padding: var(--space-sm) 
 0; } 
 .stat-rail-item:last-child { border-bottom: none; } }
+
+/* ─── RESPONSIVE MODE OVERRIDES ───────── */
+.mobile-mode .desktop-only {
+  display: none !important;
+  }
+
+  .desktop-mode .mobile-only {
+    display: none !important;
+    }

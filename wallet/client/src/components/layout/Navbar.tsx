@@ -1,0 +1,105 @@
+import React, { useState, useEffect } from 'react';
+import { NavLink } from 'react-router-dom';
+import '../../styles/globals.css';
+import '../../styles/animations.css';
+
+interface NavbarProps {
+  walletAddress: string | null;
+}
+
+const NAV_ITEMS = [
+  { to: '/dashboard', label: 'Dashboard' },
+  { to: '/automation', label: 'Automation' },
+  { to: '/recovery', label: 'Recovery' },
+  { to: '/settings', label: 'Settings' },
+];
+
+export default function Navbar({ walletAddress }: NavbarProps) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 1024);
+
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 10);
+    window.addEventListener('scroll', handleScroll);
+
+    const handleResize = () => setIsMobile(window.innerWidth <= 1024);
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
+
+  return (
+    <header className={`topnav ${scrolled ? 'scrolled' : ''}`} style={{ paddingTop: '1in' }}>
+      <div className="topnav-inner flex justify-between items-center w-full">
+
+        {/* Brand */}
+        <div className="topnav-brand">WALLET INTELLIGENCE PROTOCOL</div>
+
+        {/* Desktop Links */}
+        {!isMobile && (
+          <div className="topnav-links flex gap-md">
+            {NAV_ITEMS.map(({ to, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  `topnav-link btn btn-ghost btn-sm ${isActive ? 'active' : ''}`
+                }
+              >
+                {label}
+              </NavLink>
+            ))}
+          </div>
+        )}
+
+        {/* Wallet / Actions */}
+        <div className="topnav-actions flex items-center gap-sm">
+          {walletAddress ? (
+            <div className="wallet-chip flex items-center gap-xs">
+              <div className="pulse-dot" style={{ width: 6, height: 6 }} />
+              <span className="mono-address">
+                {walletAddress.slice(0, 6)}…{walletAddress.slice(-4)}
+              </span>
+              <span className="health-chip">94</span>
+            </div>
+          ) : (
+            <button className="btn btn-primary btn-sm">Connect</button>
+          )}
+
+          {/* Mobile Hamburger */}
+          {isMobile && (
+            <button
+              className="hamburger"
+              onClick={() => setMobileOpen(!mobileOpen)}
+              aria-label="Toggle menu"
+            >
+              <span className="hamburger-line" />
+              <span className="hamburger-line" />
+              <span className="hamburger-line" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Mobile Menu */}
+      {isMobile && mobileOpen && (
+        <div className="mobile-menu flex flex-col gap-sm">
+          {NAV_ITEMS.map(({ to, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) => `mobile-menu-item ${isActive ? 'active' : ''}`}
+              onClick={() => setMobileOpen(false)}
+            >
+              {label}
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </header>
+  );
+}

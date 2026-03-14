@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
 import LandingPage from './page';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import '../styles/globals.css';
-import '../styles/animations.css';
+import "../styles/globals.css";  
+import "../styles/animations.css"; 
+import Navbar from '../components/layout/Navbar';
+import PageContainer from '../components/layout/PageContainer';
+import { useScreenSize } from '../hooks/useScreenSize'
 
 // ─── NAV ICONS ───────────────────────────────────────────────────────
 const IconDashboard = () => (
@@ -96,39 +99,6 @@ function Sidebar({ walletAddress }: { walletAddress: string | null }) {
   );
 }
 
-// ─── TOP NAVBAR ──────────────────────────────────────────────────────
-function TopNav({ scrolled, walletAddress }: { scrolled: boolean; walletAddress: string | null }) {
-  return (
-    <header className={`topnav ${scrolled ? 'scrolled' : ''}`}>
-      <div className="topnav-inner">
-        <div className="topnav-logo mobile-only">
-          <div className="logo-mark sm">W</div>
-          <span className="logo-name">WIP</span>
-        </div>
-
-        <div className="topnav-brand desktop-only">WALLET INTELLIGENCE PROTOCOL</div>
-
-        <div className="topnav-actions">
-          {walletAddress ? (
-            <div className="wallet-chip">
-              <div className="pulse-dot" style={{ width: 6, height: 6 }} />
-              <span className="mono-address">
-                {walletAddress.slice(0, 6)}…{walletAddress.slice(-4)}
-              </span>
-              <span className="health-chip">94</span>
-            </div>
-          ) : (
-            <button className="btn btn-primary btn-sm">
-              <IconWallet />
-              Connect
-            </button>
-          )}
-        </div>
-      </div>
-    </header>
-  );
-}
-
 // ─── MOBILE TAB BAR ──────────────────────────────────────────────────
 function MobileTabBar() {
   return (
@@ -152,6 +122,7 @@ export default function Layout() {
   const [scrolled, setScrolled] = useState(false);
   const [walletAddress] = useState(null);
   const location = useLocation();
+  const { isMobile } = useScreenSize();
   const isLanding = location.pathname === '/';
 
   useEffect(() => {
@@ -162,15 +133,15 @@ export default function Layout() {
 
 
   return (
-    <div className="app-shell">
-      <Sidebar walletAddress={walletAddress} />
+   <div className={isMobile ? 'mobile-mode app-shell' : 'desktop-mode app-shell'}>
+   {!isMobile && <Sidebar walletAddress={walletAddress} />}
       <div className="main-content">
-        <TopNav scrolled={scrolled} walletAddress={walletAddress} />
-        <main className="page-container page-enter">
-          <Outlet />
-        </main>
-      </div>
-      <MobileTabBar />
+          <Navbar scrolled={scrolled} walletAddress={walletAddress} />
+            <PageContainer>
+                <Outlet />
+                  </PageContainer>
+                  </div>
+   {isMobile && <MobileTabBar />}
     </div>
   );
 }
