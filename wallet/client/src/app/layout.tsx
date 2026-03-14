@@ -130,17 +130,33 @@ export default function Layout() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  
+      return (
+  <div className={isMobile ? 'mobile-mode app-shell' : 'desktop-mode app-shell'}>
+      
+      {/* Sidebar for desktop */}
+      {!isMobile && (
+      <div className="desktop-only">
+      <Sidebar walletAddress={walletAddress} />
+      </div>
+      )}
 
-  return (
-   <div className={isMobile ? 'mobile-mode app-shell' : 'desktop-mode app-shell'}>
-  {!isMobile && <Sidebar className="desktop-only" walletAddress={walletAddress} />}
       <div className="main-content">
-         <Navbar scrolled={scrolled} walletAddress={walletAddress} isMobile={isMobile} />
-            <PageContainer>
-                <Outlet />
-                  </PageContainer>
-                  </div>
-   {isMobile && <MobileTabBar className="mobile-only" />}
-    </div>
-  );
-}
+      {/* Navbar for both desktop and mobile */}
+      <Navbar scrolled={scrolled} walletAddress={walletAddress} isMobile={isMobile} />
+
+      {/* Page content */}
+      <PageContainer>
+      <Outlet />
+      </PageContainer>
+      </div>
+
+      {/* Mobile tab bar */}
+      {isMobile && (
+      <div className="mobile-only">
+      <MobileTabBar />
+      </div>
+      )}
+      </div>
+      );
+    }
