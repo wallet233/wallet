@@ -2,80 +2,84 @@ import { useEffect } from "react";
 import { useAccount, useConfig } from "wagmi";
 import { getPublicClient } from "@wagmi/core";
 
-/* ─── WALLET SCANNER ───────────────────────────────────────── */
-/* Monitors wallet account, chain, and session status dynamically */
+/**
+ * WALLET SCANNER (v2 Heavy Duty)
+ * Fixed 'process' error for browser environments.
+ */
 
 interface WalletScannerProps {
-  account?: `0x${string}` | string | null;
+  account?: string | `0x${string}` | null;
   chain?: { id: number; name?: string } | any;
-  // Note: onAccountChange and onChainChange are now mostly handled by Wagmi's
-  // internal state, but we keep these props to trigger your custom logic.
+  connected?: boolean;
+  stayConnected?: boolean;
   onAccountChange?: (acct: string | null) => void;
   onChainChange?: (chainId: number) => void;
   onDisconnect?: () => void;
-  stayConnected?: boolean;
+  [key: string]: any; 
 }
 
 export default function WalletScanner({
   account,
   chain,
+  connected,
+  stayConnected,
   onAccountChange,
   onChainChange,
   onDisconnect,
-  stayConnected,
+  ...rest
 }: WalletScannerProps) {
   const { isConnected, address } = useAccount();
   const config = useConfig();
 
-  /* ─── ACCOUNT & CHAIN WATCHER ───────────────────────── */
-  // Instead of manual window.ethereum listeners, we watch the props 
-  // passed down from the Wagmi hooks in the parent.
+  // 1. ACCOUNT WATCHER
   useEffect(() => {
-    if (!isConnected && onDisconnect) {
-      onDisconnect();
+    const currentAddress = address || (account as `0x${string}`);
+    const currentConnected = isConnected || connected;
+
+    if (!currentConnected) {
+      if (onDisconnect) onDisconnect();
       return;
     }
 
-    if (address && onAccountChange) {
-      onAccountChange(address);
+    if (currentAddress && onAccountChange) {
+      onAccountChange(currentAddress);
     }
-  }, [address, isConnected]);
+  }, [address, isConnected, account, connected, onAccountChange, onDisconnect]);
 
+  // 2. CHAIN WATCHER
   useEffect(() => {
-    if (chain?.id && onChainChange) {
-      onChainChange(chain.id);
+    const chainId = chain?.id;
+    if (chainId && onChainChange) {
+      onChainChange(chainId);
     }
-  }, [chain?.id]);
+  }, [chain?.id, onChainChange]);
 
-  /* ─── SESSION WATCHER ───────────────────────── */
+  // 3. RPC HEARTBEAT
   useEffect(() => {
-    if (!stayConnected || !isConnected || !chain?.id) return;
+    const isActive = isConnected || connected;
+    if (!stayConnected || !isActive || !chain?.id) return;
 
     const interval = setInterval(async () => {
       try {
-        // Wagmi v2 equivalent of provider.getBlockNumber()
-        // This pings the RPC to ensure the connection is still alive
         const publicClient = getPublicClient(config, { chainId: chain.id });
         if (publicClient) {
           await publicClient.getBlockNumber();
         }
       } catch (err) {
-        console.warn("Wallet session unreachable:", err);
-        if (onDisconnect) onDisconnect();
-        clearInterval(interval);
+        console.warn("WalletScanner: RPC heartbeat failed", err);
       }
-    }, 15000); // every 15 seconds
+    }, 20000);
 
     return () => clearInterval(interval);
-  }, [stayConnected, isConnected, chain?.id, config]);
+  }, [stayConnected, isConnected, connected, chain?.id, config]);
 
-  /* ─── FALLBACK LOGGING ───────────────────────── */
+  // 4. CLEAN LOGGING (Removed Node.js 'process' check)
   useEffect(() => {
-    if (!isConnected && account) {
-      console.log("Scanner fallback: user disconnected");
+    const extraProps = Object.keys(rest);
+    if (extraProps.length > 0) {
+      console.debug("WalletScanner: Received dynamic props", extraProps);
     }
-  }, [isConnected, account]);
+  }, [rest]);
 
-  /* ─── NO VISUAL UI ──── */
   return null;
 }
