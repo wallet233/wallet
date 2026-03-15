@@ -1,98 +1,136 @@
-import { useState } from 'react';
+import React, { useState } from "react";
 
-// ─── FILE: client/components/wallet/WalletAddress.tsx ────────────────
-// Displays a wallet address with copy-to-clipboard, truncation options
-
+/* ─── WALLET ADDRESS DISPLAY ───────────────────────────────────────── */
 interface WalletAddressProps {
-  address: string;
-  showFull?: boolean;
-  prefixLength?: number;
-  suffixLength?: number;
-  className?: string;
-  onClick?: () => void;
+  account: string | null;
+  chain?: string; // e.g., 'eth', 'polygon'
+  healthScore?: number; // optional health from dashboard
 }
 
-export default function WalletAddress({
-  address,
-  showFull     = false,
-  prefixLength = 8,
-  suffixLength = 6,
-  className    = '',
-  onClick,
-}: WalletAddressProps) {
+export default function WalletAddress({ account, chain = "eth", healthScore }: WalletAddressProps) {
+  const [hover, setHover] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  if (!address) return null;
+  /* ─── CHAIN COLOR ───────────────────────── */
+  const chainColors: Record<string, string> = {
+    eth: "#627eea",
+    polygon: "#8247e5",
+    arbitrum: "#28a0f0",
+    base: "#0b0b0b",
+    optimism: "#f01f0a",
+    default: "#999"
+  };
+  const chainColor = chainColors[chain] || chainColors.default;
 
-  const display = showFull
-    ? address
-    : `${address.slice(0, prefixLength)}…${address.slice(-suffixLength)}`;
+  /* ─── TRUNCATE ADDRESS ───────────────────────── */
+  const displayAddress = account ? `${account.slice(0,6)}…${account.slice(-4)}` : "Not Connected";
 
-  const handleCopy = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      await navigator.clipboard.writeText(address);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // clipboard not available
-    }
+  /* ─── BLOCKCHAIN EXPLORER LINK ───────────────────────── */
+  const explorerUrls: Record<string, string> = {
+    eth: "https://etherscan.io/address/",
+    polygon: "https://polygonscan.com/address/",
+    arbitrum: "https://arbiscan.io/address/",
+    base: "https://basescan.org/address/",
+    optimism: "https://optimistic.etherscan.io/address/"
+  };
+  const explorerLink = account ? (explorerUrls[chain] || explorerUrls.eth) + account : "#";
+
+  /* ─── CLICK HANDLERS ───────────────────────── */
+  const openExplorer = () => { if (account) window.open(explorerLink, "_blank", "noopener,noreferrer"); };
+  const copyToClipboard = () => {
+    if (!account) return;
+    navigator.clipboard.writeText(account);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   };
 
   return (
-    <button
-      className={`wa-chip ${copied ? 'wa-copied' : ''} ${className}`}
-      onClick={onClick ?? handleCopy}
-      title={copied ? 'Copied!' : `Copy: ${address}`}
+    <div
+      className="wallet-address-container"
+      style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: account ? "pointer" : "default" }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
     >
-      <span className="mono-address wa-text">{display}</span>
-      <span className="wa-copy-icon" onClick={handleCopy} title="Copy address">
-        {copied ? '✓' : '⎘'}
+      {/* Pulse dot for active connection */}
+      {account && <span className="pulse-dot" style={{ backgroundColor: chainColor }} />}
+
+      {/* Wallet address */}
+      <span
+        className="wallet-address-text"
+        title={account || ""}
+        style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: chainColor }}
+      >
+        {displayAddress}
       </span>
 
+      {/* Health Score badge (optional) */}
+      {healthScore !== undefined && (
+        <span
+          className="health-badge"
+          style={{
+            backgroundColor: "#e0e0e0",
+            color: healthScore > 80 ? "green" : healthScore > 50 ? "orange" : "red",
+            borderRadius: "999px",
+            padding: "2px 6px",
+            fontSize: "12px",
+            fontWeight: 600
+          }}
+        >
+          {healthScore}
+        </span>
+      )}
+
+      {/* Optional View button */}
+      {account && (
+        <a
+          href={explorerLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            textDecoration: "none",
+            color: "#555",
+            fontSize: "12px",
+            padding: "2px 6px",
+            border: "1px solid #ccc",
+            borderRadius: "6px"
+          }}
+        >
+          View
+        </a>
+      )}
+
+      {/* Copy to clipboard button */}
+      {account && (
+        <button
+          onClick={copyToClipboard}
+          style={{
+            fontSize: "12px",
+            padding: "2px 6px",
+            borderRadius: "6px",
+            border: "1px solid #ccc",
+            cursor: "pointer",
+            backgroundColor: copied ? "#d4ffd4" : "#fff"
+          }}
+        >
+          {copied ? "Copied!" : "Copy"}
+        </button>
+      )}
+
+      {/* Styles */}
       <style>{`
-        .wa-chip {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 6px 12px;
-          background: var(--bg-elevated);
-          border: 1px solid var(--border);
-          border-radius: var(--radius-pill);
-          cursor: pointer;
-          transition: all var(--transition-fast);
-          font-family: var(--font-body);
-          max-width: 100%;
+        .pulse-dot {
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+          display: inline-block;
+          animation: pulse 1.2s infinite;
         }
-
-        .wa-chip:hover { border-color: var(--border-hover); }
-
-        .wa-chip.wa-copied {
-          border-color: rgba(0,232,122,0.3);
-          background: var(--green-dim);
+        @keyframes pulse {
+          0% { transform: scale(0.8); opacity: 0.7; }
+          50% { transform: scale(1.2); opacity: 1; }
+          100% { transform: scale(0.8); opacity: 0.7; }
         }
-        .wa-chip.wa-copied .wa-text  { color: var(--green); }
-        .wa-chip.wa-copied .wa-copy-icon { color: var(--green); }
-
-        .wa-text {
-          font-size: 12px;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          color: var(--text-secondary);
-          transition: color var(--transition-fast);
-        }
-
-        .wa-copy-icon {
-          font-size: 12px;
-          color: var(--text-tertiary);
-          flex-shrink: 0;
-          transition: color var(--transition-fast);
-          padding: 2px;
-          border-radius: 3px;
-        }
-        .wa-copy-icon:hover { color: var(--text-secondary); }
       `}</style>
-    </button>
+    </div>
   );
 }

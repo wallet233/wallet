@@ -1,118 +1,117 @@
-// ─── FILE: client/components/wallet/WalletStatus.tsx ─────────────────
-// Connected/disconnected wallet status chip with health score badge
+import React, { useEffect, useState } from "react";
+import WalletAddress from "./WalletAddress";
 
+/* ─── WALLET STATUS DISPLAY ───────────────────────────────────────── */
 interface WalletStatusProps {
-  address?: string;
+  provider: any;
+  signer: any;
+  account: string | null;
+  connected: boolean;
+  stayConnected: boolean;
   healthScore?: number;
-  connected?: boolean;
-  network?: string;
-  onConnect?: () => void;
-  onDisconnect?: () => void;
+  chain?: string;
 }
 
 export default function WalletStatus({
-  address,
-  healthScore = 94,
-  connected   = false,
-  network     = 'Ethereum',
-  onConnect,
-  onDisconnect,
+  provider,
+  signer,
+  account,
+  connected,
+  stayConnected,
+  healthScore = 0,
+  chain = "eth",
 }: WalletStatusProps) {
+  const [status, setStatus] = useState<string>("Disconnected");
+  const [color, setColor] = useState<string>("#999");
+  const [lastBlock, setLastBlock] = useState<number | null>(null);
 
-  const scoreColor =
-    healthScore >= 80 ? 'var(--green)' :
-    healthScore >= 60 ? 'var(--amber)' :
-                        'var(--red)';
+  /* ─── STATUS & COLOR LOGIC ───────────────────────── */
+  useEffect(() => {
+    if (!connected) {
+      setStatus("Disconnected");
+      setColor("#999");
+    } else if (connected && !signer) {
+      setStatus("Pending");
+      setColor("#f5a623");
+    } else {
+      setStatus("Connected");
+      setColor("#4caf50");
+    }
+  }, [connected, signer]);
 
-  if (!connected) {
-    return (
-      <button className="ws-chip ws-disconnected" onClick={onConnect}>
-        <span className="ws-dot-off" />
-        <span className="ws-label">Connect Wallet</span>
-        <style>{WS_STYLES}</style>
-      </button>
-    );
-  }
+  /* ─── BLOCK MONITOR ───────────────────────── */
+  useEffect(() => {
+    if (!provider || !connected) return;
 
-  const shortAddr = address
-    ? `${address.slice(0, 6)}…${address.slice(-4)}`
-    : '0x…';
+    let interval = setInterval(async () => {
+      try {
+        const blockNum = await provider.getBlockNumber();
+        setLastBlock(blockNum);
+      } catch (err) {
+        setStatus("Disconnected");
+        setColor("#999");
+      }
+    }, 10000); // every 10 seconds
+
+    return () => clearInterval(interval);
+  }, [provider, connected]);
+
+  /* ─── SESSION INDICATOR ───────────────────────── */
+  const sessionIndicator = stayConnected ? "Persistent" : "Temporary";
 
   return (
-    <div className="ws-chip ws-connected" onClick={onDisconnect} title="Click to disconnect">
-      {/* Live pulse */}
-      <div className="pulse-dot" />
-
-      {/* Address */}
-      <span className="ws-addr mono-address">{shortAddr}</span>
-
-      {/* Network */}
-      <span className="ws-network">{network}</span>
-
-      {/* Health score */}
-      <div className="ws-score" style={{ background: `${scoreColor}18`, color: scoreColor }}>
-        {healthScore}
+    <div
+      className="wallet-status"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "var(--space-sm)",
+        padding: "var(--space-sm)",
+        background: "var(--bg-card)",
+        borderRadius: "var(--radius-md)",
+        minWidth: "200px"
+      }}
+    >
+      {/* Top status row */}
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <span
+          className="status-dot"
+          style={{
+            width: "10px",
+            height: "10px",
+            borderRadius: "50%",
+            backgroundColor: color,
+            animation: connected ? "pulse 1.2s infinite" : "none"
+          }}
+        />
+        <span style={{ fontWeight: 600 }}>{status}</span>
+        <span style={{ fontSize: "12px", color: "#666" }}>({sessionIndicator})</span>
       </div>
 
-      <style>{WS_STYLES}</style>
+      {/* Wallet address component */}
+      {account && (
+        <WalletAddress
+          account={account}
+          chain={chain}
+          healthScore={healthScore}
+        />
+      )}
+
+      {/* Last block info */}
+      {connected && lastBlock && (
+        <div style={{ fontSize: "12px", color: "#999" }}>
+          Last Block: {lastBlock}
+        </div>
+      )}
+
+      {/* Styles */}
+      <style>{`
+        @keyframes pulse {
+          0% { transform: scale(0.8); opacity: 0.7; }
+          50% { transform: scale(1.2); opacity: 1; }
+          100% { transform: scale(0.8); opacity: 0.7; }
+        }
+      `}</style>
     </div>
   );
 }
-
-const WS_STYLES = `
-  .ws-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-sm);
-    padding: 8px var(--space-md);
-    border-radius: var(--radius-pill);
-    border: 1px solid var(--border);
-    font-family: var(--font-body);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    user-select: none;
-  }
-
-  .ws-connected {
-    background: var(--bg-card);
-  }
-  .ws-connected:hover { border-color: var(--border-hover); }
-
-  .ws-disconnected {
-    background: transparent;
-    color: var(--text-secondary);
-    font-size: 13px;
-    font-weight: 500;
-  }
-  .ws-disconnected:hover { border-color: var(--border-hover); color: var(--text-primary); }
-
-  .ws-dot-off {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--text-tertiary);
-    flex-shrink: 0;
-  }
-
-  .ws-label { font-size: 13px; }
-
-  .ws-addr { font-size: 12px; }
-
-  .ws-network {
-    font-size: 11px;
-    color: var(--text-tertiary);
-    padding: 2px 7px;
-    border-radius: var(--radius-pill);
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-  }
-
-  .ws-score {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 700;
-    padding: 2px 7px;
-    border-radius: var(--radius-pill);
-    flex-shrink: 0;
-  }
-`;
