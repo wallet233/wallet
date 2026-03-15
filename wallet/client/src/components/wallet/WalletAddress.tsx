@@ -2,14 +2,32 @@ import React, { useState } from "react";
 
 /* ─── WALLET ADDRESS DISPLAY ───────────────────────────────────────── */
 interface WalletAddressProps {
-  account: string | null;
-  chain?: string; // e.g., 'eth', 'polygon'
-  healthScore?: number; // optional health from dashboard
+  account: string | null | undefined;
+  // Updated to accept the Wagmi Chain object or a string
+  chain?: { name?: string; id?: number } | string | any; 
+  healthScore?: number; 
 }
 
-export default function WalletAddress({ account, chain = "eth", healthScore }: WalletAddressProps) {
+export default function WalletAddress({ account, chain, healthScore }: WalletAddressProps) {
   const [hover, setHover] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  /* ─── DYNAMIC CHAIN IDENTIFIER ───────────────────────── */
+  // This helper extracts a string key (like 'eth' or 'base') from the Wagmi chain object
+  const getChainKey = () => {
+    if (!chain) return "eth";
+    if (typeof chain === "string") return chain.toLowerCase();
+    
+    const name = chain.name?.toLowerCase() || "";
+    if (name.includes("ethereum") || name.includes("mainnet")) return "eth";
+    if (name.includes("polygon")) return "polygon";
+    if (name.includes("arbitrum")) return "arbitrum";
+    if (name.includes("base")) return "base";
+    if (name.includes("optimism")) return "optimism";
+    return "eth";
+  };
+
+  const activeChain = getChainKey();
 
   /* ─── CHAIN COLOR ───────────────────────── */
   const chainColors: Record<string, string> = {
@@ -20,7 +38,7 @@ export default function WalletAddress({ account, chain = "eth", healthScore }: W
     optimism: "#f01f0a",
     default: "#999"
   };
-  const chainColor = chainColors[chain] || chainColors.default;
+  const chainColor = chainColors[activeChain] || chainColors.default;
 
   /* ─── TRUNCATE ADDRESS ───────────────────────── */
   const displayAddress = account ? `${account.slice(0,6)}…${account.slice(-4)}` : "Not Connected";
@@ -33,7 +51,7 @@ export default function WalletAddress({ account, chain = "eth", healthScore }: W
     base: "https://basescan.org/address/",
     optimism: "https://optimistic.etherscan.io/address/"
   };
-  const explorerLink = account ? (explorerUrls[chain] || explorerUrls.eth) + account : "#";
+  const explorerLink = account ? (explorerUrls[activeChain] || explorerUrls.eth) + account : "#";
 
   /* ─── CLICK HANDLERS ───────────────────────── */
   const openExplorer = () => { if (account) window.open(explorerLink, "_blank", "noopener,noreferrer"); };

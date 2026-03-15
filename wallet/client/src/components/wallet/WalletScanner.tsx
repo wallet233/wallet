@@ -1,85 +1,81 @@
 import { useEffect } from "react";
-import { ethers } from "ethers";
+import { useAccount, useConfig } from "wagmi";
+import { getPublicClient } from "@wagmi/core";
 
 /* ─── WALLET SCANNER ───────────────────────────────────────── */
 /* Monitors wallet account, chain, and session status dynamically */
 
 interface WalletScannerProps {
-  provider: ethers.providers.Web3Provider | null;
-  signer: ethers.Signer | null;
-  account: string | null;
-  connected: boolean;
-  stayConnected: boolean;
-  onAccountChange: (acct: string | null) => void;
-  onChainChange: (chainId: number) => void;
-  onDisconnect: () => void;
+  account?: `0x${string}` | string | null;
+  chain?: { id: number; name?: string } | any;
+  // Note: onAccountChange and onChainChange are now mostly handled by Wagmi's
+  // internal state, but we keep these props to trigger your custom logic.
+  onAccountChange?: (acct: string | null) => void;
+  onChainChange?: (chainId: number) => void;
+  onDisconnect?: () => void;
+  stayConnected?: boolean;
 }
 
 export default function WalletScanner({
-  provider,
-  signer,
   account,
-  connected,
-  stayConnected,
+  chain,
   onAccountChange,
   onChainChange,
   onDisconnect,
+  stayConnected,
 }: WalletScannerProps) {
+  const { isConnected, address } = useAccount();
+  const config = useConfig();
 
   /* ─── ACCOUNT & CHAIN WATCHER ───────────────────────── */
+  // Instead of manual window.ethereum listeners, we watch the props 
+  // passed down from the Wagmi hooks in the parent.
   useEffect(() => {
-    if (!provider || !connected) return;
+    if (!isConnected && onDisconnect) {
+      onDisconnect();
+      return;
+    }
 
-    const eth = (window as any).ethereum;
-    if (!eth) return;
+    if (address && onAccountChange) {
+      onAccountChange(address);
+    }
+  }, [address, isConnected]);
 
-    const handleAccountsChanged = (accounts: string[]) => {
-      if (accounts.length === 0) {
-        onDisconnect();
-      } else {
-        onAccountChange(accounts[0]);
-      }
-    };
-
-    const handleChainChanged = (chainId: string) => {
-      const parsedId = parseInt(chainId, 16); // chainId comes as hex
-      onChainChange(parsedId);
-    };
-
-    eth.on("accountsChanged", handleAccountsChanged);
-    eth.on("chainChanged", handleChainChanged);
-
-    return () => {
-      eth.removeListener("accountsChanged", handleAccountsChanged);
-      eth.removeListener("chainChanged", handleChainChanged);
-    };
-  }, [provider, connected]);
+  useEffect(() => {
+    if (chain?.id && onChainChange) {
+      onChainChange(chain.id);
+    }
+  }, [chain?.id]);
 
   /* ─── SESSION WATCHER ───────────────────────── */
   useEffect(() => {
-    if (!stayConnected || !connected) return;
+    if (!stayConnected || !isConnected || !chain?.id) return;
 
-    let interval = setInterval(async () => {
+    const interval = setInterval(async () => {
       try {
-        // Optional: ping the provider to keep session alive
-        if (provider) await provider.getBlockNumber();
+        // Wagmi v2 equivalent of provider.getBlockNumber()
+        // This pings the RPC to ensure the connection is still alive
+        const publicClient = getPublicClient(config, { chainId: chain.id });
+        if (publicClient) {
+          await publicClient.getBlockNumber();
+        }
       } catch (err) {
-        console.warn("Wallet disconnected or unreachable:", err);
-        onDisconnect();
+        console.warn("Wallet session unreachable:", err);
+        if (onDisconnect) onDisconnect();
         clearInterval(interval);
       }
     }, 15000); // every 15 seconds
 
     return () => clearInterval(interval);
-  }, [stayConnected, connected, provider]);
+  }, [stayConnected, isConnected, chain?.id, config]);
 
-  /* ─── OPTIONAL OFFLINE MOCKS / FALLBACK ───────────────────────── */
+  /* ─── FALLBACK LOGGING ───────────────────────── */
   useEffect(() => {
-    if (!connected && account) {
+    if (!isConnected && account) {
       console.log("Scanner fallback: user disconnected");
     }
-  }, [connected, account]);
+  }, [isConnected, account]);
 
-  /* ─── NO VISUAL UI ───────────────────────── */
+  /* ─── NO VISUAL UI ──── */
   return null;
 }

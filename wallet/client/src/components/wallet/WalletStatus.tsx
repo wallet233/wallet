@@ -3,23 +3,24 @@ import WalletAddress from "./WalletAddress";
 
 /* ─── WALLET STATUS DISPLAY ───────────────────────────────────────── */
 interface WalletStatusProps {
-  provider: any;
-  signer: any;
-  account: string | null;
+  account: string | null | undefined;
+  chain?: { id: number; name?: string } | any;
   connected: boolean;
-  stayConnected: boolean;
+  stayConnected?: boolean;
   healthScore?: number;
-  chain?: string;
+  // Included to prevent breaking changes if passed from parent
+  provider?: any;
+  signer?: any;
 }
 
 export default function WalletStatus({
+  account,
+  chain,
+  connected,
+  stayConnected = false,
+  healthScore = 0,
   provider,
   signer,
-  account,
-  connected,
-  stayConnected,
-  healthScore = 0,
-  chain = "eth",
 }: WalletStatusProps) {
   const [status, setStatus] = useState<string>("Disconnected");
   const [color, setColor] = useState<string>("#999");
@@ -30,28 +31,33 @@ export default function WalletStatus({
     if (!connected) {
       setStatus("Disconnected");
       setColor("#999");
-    } else if (connected && !signer) {
+    } else if (connected && !account) {
       setStatus("Pending");
       setColor("#f5a623");
     } else {
       setStatus("Connected");
       setColor("#4caf50");
     }
-  }, [connected, signer]);
+  }, [connected, account]);
 
   /* ─── BLOCK MONITOR ───────────────────────── */
   useEffect(() => {
-    if (!provider || !connected) return;
+    if (!connected) return;
 
-    let interval = setInterval(async () => {
+    const fetchBlock = async () => {
       try {
-        const blockNum = await provider.getBlockNumber();
-        setLastBlock(blockNum);
+        // If a v2 provider/client is passed, use it, otherwise fallback
+        if (provider?.getBlockNumber) {
+          const blockNum = await provider.getBlockNumber();
+          setLastBlock(Number(blockNum));
+        }
       } catch (err) {
-        setStatus("Disconnected");
-        setColor("#999");
+        console.warn("Block fetch failed", err);
       }
-    }, 10000); // every 10 seconds
+    };
+
+    fetchBlock();
+    let interval = setInterval(fetchBlock, 10000); // every 10 seconds
 
     return () => clearInterval(interval);
   }, [provider, connected]);
@@ -67,9 +73,10 @@ export default function WalletStatus({
         flexDirection: "column",
         gap: "var(--space-sm)",
         padding: "var(--space-sm)",
-        background: "var(--bg-card)",
-        borderRadius: "var(--radius-md)",
-        minWidth: "200px"
+        background: "var(--bg-card, #fff)",
+        borderRadius: "var(--radius-md, 8px)",
+        minWidth: "200px",
+        border: "1px solid #eee"
       }}
     >
       {/* Top status row */}
