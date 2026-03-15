@@ -116,12 +116,11 @@ export default function Layout() {
           </PageContainer>
 {walletOpen &&
 createPortal(
-<div className="wallet-overlay">
+<div className="wallet-overlay" onClick={() => setWalletOpen(false)}>
 <div
 className="wallet-modal"
 onClick={(e) => e.stopPropagation()}
 >
-
 {/* CLOSE BUTTON */}
 <button
 onClick={() => setWalletOpen(false)}
@@ -137,9 +136,7 @@ cursor: "pointer"
 >
 ✕
 </button>
-
 <ConnectWallet onConnect={(addr: string) => setWalletAddress(addr)} />
-
 {walletAddress && (
 <>
 <WalletStatus connected={true} account={walletAddress} />
@@ -148,7 +145,6 @@ cursor: "pointer"
 <WalletScanner account={walletAddress} connected={true} />
 </>
 )}
-
 </div>
 </div>,
 document.body
