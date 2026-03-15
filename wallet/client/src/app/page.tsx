@@ -1,5 +1,12 @@
+import { useState, useRef, useEffect } from 'react';
 
- import { useState, useRef, useEffect } from 'react';
+
+import ConnectWallet from '../components/wallet/ConnectWallet';
+import WalletStatus from '../components/wallet/WalletStatus';
+import WalletAddress from '../components/wallet/WalletAddress';
+import WalletTransactions from '../components/wallet/WalletTransactions';
+import WalletScanner from '../components/wallet/WalletScanner';
+
 
 const FEATURES = [
   {
@@ -63,6 +70,7 @@ const FEATURES = [
 export default function LandingPage() {
   const [activeSection, setActiveSection] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [walletOpen, setWalletOpen] = useState(false);
 
   useEffect(() => {
     const container = containerRef.current;

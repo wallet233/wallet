@@ -1,0 +1,25 @@
+/* ─── WALLET OVERLAY / MODAL ─── */
+.wallet-overlay {
+  position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    backdrop-filter: blur(8px);
+    display: flex;
+    justify-content: center;
+   align-items: center;
+   z-index: 100; /* above everything else */
+                }
+
+ .wallet-modal {
+   background: var(--bg-base);
+   border-radius: 16px;
+   padding: 2rem;
+   width: 90%;
+  max-width: 600px;
+  max-height: 90%;
+  overflow-y: auto;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+  display: flex;
+ flex-direction: column;
+ gap: 1.5rem;
+             }

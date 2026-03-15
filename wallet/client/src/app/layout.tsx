@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import "../styles/globals.css";  
 import "../styles/animations.css"; 
+import "../styles/dashboard.css";
 import { NAV_ITEMS } from '../components/layout/Navbar';
 import PageContainer from '../components/layout/PageContainer';
 import { useScreenSize } from '../hooks/useScreenSize';
@@ -9,9 +10,11 @@ import { useScreenSize } from '../hooks/useScreenSize';
 export default function Layout() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [walletOpen, setWalletOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
   const { isMobile } = useScreenSize();
+
 
   // Track scroll for header styling
   useEffect(() => {
@@ -52,15 +55,20 @@ export default function Layout() {
 
           {/* Wallet / Actions */}
           <div className="topnav-actions flex items-center gap-sm">
-            {walletAddress ? (
-              <div className="wallet-chip flex items-center gap-xs">
-                <div className="pulse-dot" style={{ width: 6, height: 6 }} />
-                <span className="mono-address">{walletAddress.slice(0, 6)}…{walletAddress.slice(-4)}</span>
-                <span className="health-chip">94</span>
-              </div>
-            ) : (
-              <button className="btn btn-primary btn-sm">Connect</button>
-            )}
+          {walletAddress ? (
+          <div className="wallet-chip flex items-center gap-xs">
+          <div className="pulse-dot" style={{ width: 6, height: 6 }} />
+          <span className="mono-address">{walletAddress.slice(0, 6)}…{walletAddress.slice(-4)}</span>
+          <span className="health-chip">94</span>
+          </div>
+          ) : (
+          <button
+          className="btn btn-primary btn-sm"
+          onClick={() => setWalletOpen(true)}
+          >
+          Connect
+          </button>
+          )}
 
             {/* Mobile Hamburger */}
             {isMobile && (
@@ -99,6 +107,26 @@ export default function Layout() {
         <Outlet />
           </div>
           </PageContainer>
+    {/* ─── WALLET OVERLAY ─── */}
+    {walletOpen && (
+    <div
+    className="wallet-overlay fixed inset-0 bg-black/50 z-50 flex items-center justify-center"
+    onClick={() => setWalletOpen(false)} // click outside closes modal
+    >
+    <div
+    className="wallet-modal bg-bg-base p-6 rounded-lg relative"
+    onClick={(e) => e.stopPropagation()} // clicking inside DOESN'T close modal
+    >
+    <ConnectWallet
+    onConnect={(addr: string) => setWalletAddress(addr)} // update your wallet address
+    />
+    <WalletStatus account={walletAddress} />
+    <WalletAddress account={walletAddress} />
+    <WalletTransactions account={walletAddress} />
+    <WalletScanner account={walletAddress} />
+    </div>
+    </div>
+    )}
      </div>
   );
 }
