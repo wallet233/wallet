@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import RecoverDustButton from '../../components/actions/RecoverDustButton';
 import BatchBurnButton   from '../../components/actions/BatchBurnButton';
 import SweepSpamButton   from '../../components/actions/SweepSpamButton';
-import '../styles/recovery.css';
+import "../../styles/components.css";
 
 // ─── TYPES ────────────────────────────────────────────────────────────
 type ItemType = 'all' | 'dust' | 'spam' | 'zero';

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import '../styles/components.css'
+import '../../styles/components.css'
 
 type Schedule = 'every_block' | 'hourly' | 'daily' | 'weekly'
 

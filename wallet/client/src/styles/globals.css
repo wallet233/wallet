@@ -67,10 +67,12 @@ rgba(255, 255, 255, 0.55);
 --radius-pill: 
 9999px; 
 
-/* Typography */ --font-display: 'Bebas Neue', 
+/* Typography */ 
+--font-display: 'Bebas Neue', 
 sans-serif; 
 
-/* Tesla DNA — giant headlines */ --font-body: 'DM Sans', sans-serif; 
+/* Tesla DNA — giant headlines */ 
+--font-body: 'DM Sans', sans-serif; 
 
 --font-mono: 'JetBrains Mono', monospace;
 
@@ -187,7 +189,12 @@ border-radius: var(--radius-md); aspect-ratio: 1; }
   max-width: var(--content-max);
   margin: 0 auto;
   padding: var(--space-md);
+  display: flex;   
+  flex-direction: column; 
+   flex: 1;
+  min-height: calc(100dvh - var(--nav-height));
                 }
+
 
 @media (max-width: 768px) {
 .page-container {

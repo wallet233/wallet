@@ -93,11 +93,12 @@ export default function Layout() {
           </div>
         )}
       </header>
-
-      {/* ─── PAGE CONTENT ────────────────────────────────────────────── */}
-      <PageContainer>
+      {/* ─── PAGE CONTENT ──────── */}
+ <PageContainer style={{ background: 'black' }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', width: '100%' }}>
         <Outlet />
-      </PageContainer>
-    </div>
+          </div>
+          </PageContainer>
+     </div>
   );
 }

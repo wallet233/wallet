@@ -1,9 +1,11 @@
-import WalletHealthCard from '../../components/dashboard/WalletHealthCard';
-import TokenList from '../../components/dashboard/TokenList';
-import DustSummary from '../../components/dashboard/DustSummary';
-import CleanPointsCard from '../../components/dashboard/CleanPointsCard';
+'use client';
 
-// ─── DASHBOARD PAGE ───────
+ import WalletHealthCard from '../../components/dashboard/WalletHealthCard';
+ import TokenList from '../../components/dashboard/TokenList';
+ import DustSummary from '../../components/dashboard/DustSummary';
+ import CleanPointsCard from '../../components/dashboard/CleanPointsCard';
+
+/* ─── DASHBOARD PAGE ───────*/
 export default function DashboardPage() {
   // Plug in real data via hooks later
   const portfolio = {
@@ -16,7 +18,10 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="dashboard-page">
+    <div
+    className="dashboard-page"
+    style={{ flex: 1, display: 'flex', flexDirection: 'column', width: '100%' }}
+      >
       {/* ── PORTFOLIO HERO (Zerion DNA — giant center-stage value) ── */}
       <section className="portfolio-hero anim-fade-up">
         <div className="portfolio-hero-inner">
@@ -63,7 +68,7 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* ── STAT RAIL (Tesla DNA) ───────────────────────────────── */}
+      {/* ── STAT RAIL (Tesla DNA) ────────── */}
       <section className="dashboard-stats card anim-fade-up delay-1">
         <div className="stat-rail">
           <div className="stat-rail-item">
@@ -85,8 +90,8 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* ── MAIN GRID ───────────────────────────────────────────── */}
-      <div className="dashboard-grid">
+      {/* ── MAIN GRID ───── */}
+     <div className="dashboard-grid">
         <div className="dashboard-col-main">
           <TokenList />
         </div>
@@ -100,8 +105,7 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-/* ─── PAGE STYLES ───────────────────────────────────────────────────── */
+/* ─── PAGE STYLES ────── */
 const styles = `
 .dashboard-page {
 display: flex;
@@ -250,4 +254,4 @@ if (typeof document !== 'undefined') {
     style.textContent = styles;
     document.head.appendChild(style);
   }
-}
+} 
