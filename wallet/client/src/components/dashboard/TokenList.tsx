@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAccount, useBalance } from "wagmi";
 import { formatUnits } from "viem";
 
-type Token = {
+export type Token = {
   id: string;
   symbol: string;
   name: string;
@@ -12,21 +12,46 @@ type Token = {
   change24h?: number;
   chainLabel?: string;
   isSpam?: boolean;
+  tokenAddress?: string;
+  chainId?: number;
 };
 
-export default function TokenList() {
-  const { address, isConnected } = useAccount();
+interface TokenListProps {
+  selectable?: boolean;
+  selectedIds?: string[];
+  onSelect?: (id: string) => void;
+  filter?: "all" | "clean" | "spam";
+  sortBy?: "value" | "name";
+  tokens?: Token[];
+  walletAddress?: string;
+  autoRefresh?: boolean;
+  onTokensChange?: (tokens: Token[]) => void;
+}
+
+export default function TokenList({
+  selectable = false,
+  selectedIds = [],
+  onSelect,
+  filter: externalFilter,
+  sortBy: externalSort,
+  tokens: externalTokens,
+  walletAddress: customAddress,
+  autoRefresh = true,
+  onTokensChange,
+}: TokenListProps) {
+  const { address: connectedAddress, isConnected } = useAccount();
+  const address = customAddress || connectedAddress;
   const { data: native } = useBalance({ address });
 
   const [tokens, setTokens] = useState<Token[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState(externalFilter || "all");
+  const [sortBy, setSortBy] = useState(externalSort || "value");
 
-  const [filter, setFilter] = useState("all");
-  const [sortBy, setSortBy] = useState("value");
-
-  const syncWallet = useCallback(async () => {
-    if (!isConnected || !address) return;
+  // ── FETCH TOKENS FROM BACKEND ───────────────────────────────
+  const fetchTokens = useCallback(async () => {
+    if (!isConnected && !customAddress) return;
 
     setLoading(true);
     setError(null);
@@ -35,7 +60,6 @@ export default function TokenList() {
       const res = await fetch(
         `http://localhost:3001/tokens/list?walletAddress=${address}`
       );
-
       if (!res.ok) throw new Error("API error");
 
       const erc20s: Token[] = await res.json();
@@ -55,48 +79,70 @@ export default function TokenList() {
           ]
         : [];
 
-      setTokens([...nativeItem, ...erc20s]);
+      const allTokens = externalTokens || [...nativeItem, ...erc20s];
+      setTokens(allTokens);
+
+      if (onTokensChange) onTokensChange(allTokens); // Sync with parent
     } catch (err) {
       console.error("Token sync error:", err);
       setError("Unable to load tokens");
       setTokens([]);
+      if (onTokensChange) onTokensChange([]);
     } finally {
       setLoading(false);
     }
-  }, [address, isConnected, native]);
+  }, [address, isConnected, native, externalTokens, customAddress, onTokensChange]);
 
+  // ── AUTO REFRESH INTERVAL ────────────────────────────────
   useEffect(() => {
-    syncWallet();
-  }, [syncWallet]);
+    fetchTokens();
 
-  const filtered = tokens
-    .filter((t) =>
-      filter === "all"
-        ? true
-        : filter === "spam"
-        ? t.isSpam
-        : !t.isSpam
-    )
-    .sort((a, b) => {
-      if (sortBy === "value") return (b.usdValue || 0) - (a.usdValue || 0);
-      if (sortBy === "name") return (a.symbol || "").localeCompare(b.symbol || "");
-      return 0;
-    });
+    if (autoRefresh) {
+      const interval = setInterval(fetchTokens, 15000); // 15s
+      return () => clearInterval(interval);
+    }
+  }, [fetchTokens, autoRefresh]);
+
+  // ── FILTER & SORT ───────────────────────────────────────
+  const filteredTokens = useMemo(() => {
+    const currentFilter = externalFilter || filter;
+    const currentSort = externalSort || sortBy;
+
+    return (externalTokens || tokens)
+      .filter((t) =>
+        currentFilter === "all"
+          ? true
+          : currentFilter === "spam"
+          ? t.isSpam
+          : !t.isSpam
+      )
+      .sort((a, b) => {
+        if (currentSort === "value") return (b.usdValue || 0) - (a.usdValue || 0);
+        if (currentSort === "name") return (a.symbol || "").localeCompare(b.symbol || "");
+        return 0;
+      });
+  }, [tokens, externalTokens, filter, sortBy, externalFilter, externalSort]);
+
+  // ── SELECTION HANDLER ───────────────────────────────────
+  const handleSelect = (id: string) => {
+    if (!selectable || !onSelect) return;
+    onSelect(id);
+  };
 
   return (
     <div className="tl-container card">
       <div className="tl-header">
         <span className="label-eyebrow">
-          {isConnected
+          {address
             ? loading
               ? "Syncing Blockchain Data..."
               : error
               ? "Error loading tokens"
-              : `Wallet Assets (${tokens.length})`
+              : `Wallet Assets (${filteredTokens.length})`
             : "Connect wallet to view tokens"}
         </span>
 
-        {isConnected && (
+        {address && (
           <div className="tl-controls">
             <div className="tl-tabs">
               {[
@@ -136,25 +182,24 @@ export default function TokenList() {
       <div className="divider" />
 
       <div className="tl-list">
-        {loading && (
-          <div style={{ padding: "1rem" }}>Loading tokens...</div>
-        )}
-
-        {error && (
-          <div style={{ padding: "1rem", color: "red" }}>{error}</div>
-        )}
+        {loading && <div style={{ padding: "1rem" }}>Loading tokens...</div>}
+        {error && <div style={{ padding: "1rem", color: "red" }}>{error}</div>}
 
         {!loading &&
           !error &&
-          filtered.map((token, i) => {
+          filteredTokens.map((token, i) => {
             const change = token.change24h ?? 0;
+            const isSelected = selectedIds.includes(token.id);
 
             return (
               <div
                 key={token.id}
                 className={`token-row tl-row ${
                   token.isSpam ? "spam" : ""
-                } animate-slide-up stagger-${Math.min(i + 1, 8)}`}
+                } animate-slide-up stagger-${Math.min(i + 1, 8)} ${
+                  selectable && isSelected ? "selected" : ""
+                }`}
+                onClick={() => handleSelect(token.id)}
               >
                 <div className="tl-token-info">
                   <div className="token-icon">
@@ -179,10 +224,7 @@ export default function TokenList() {
                     )}
 
                     {token.isSpam && (
-                      <div
-                        className="spam-badge-overlay"
-                        title="Spam token"
-                      >
+                      <div className="spam-badge-overlay" title="Spam token">
                         !
                       </div>
                     )}
@@ -190,18 +232,12 @@ export default function TokenList() {
 
                   <div className="token-info">
                     <div className="token-name">{token.name}</div>
-
                     <div className="token-meta">
-                      <span
-                        className={`chain-badge chain-${token.chainLabel}`}
-                      >
+                      <span className={`chain-badge chain-${token.chainLabel}`}>
                         <span className="chain-dot" />
                         {token.chainLabel}
                       </span>
-
-                      {token.isSpam && (
-                        <span className="spam-label">spam</span>
-                      )}
+                      {token.isSpam && <span className="spam-label">spam</span>}
                     </div>
                   </div>
                 </div>
@@ -209,12 +245,7 @@ export default function TokenList() {
                 <div className="tl-balance">
                   <div className="token-usd">
                     {token.balance}{" "}
-                    <span
-                      style={{
-                        color: "var(--text-tertiary)",
-                        fontWeight: 400,
-                      }}
-                    >
+                    <span style={{ color: "var(--text-tertiary)", fontWeight: 400 }}>
                       {token.symbol}
                     </span>
                   </div>
@@ -230,16 +261,8 @@ export default function TokenList() {
                   </div>
                 </div>
 
-                <div
-                  className={`tl-change ${
-                    change >= 0 ? "pnl-positive" : "pnl-negative"
-                  }`}
-                >
-                  <span
-                    className={`pnl-badge ${
-                      change >= 0 ? "positive" : "negative"
-                    }`}
-                  >
+                <div className={`tl-change ${change >= 0 ? "pnl-positive" : "pnl-negative"}`}>
+                  <span className={`pnl-badge ${change >= 0 ? "positive" : "negative"}`}>
                     {change >= 0 ? "+" : ""}
                     {change}%
                   </span>
