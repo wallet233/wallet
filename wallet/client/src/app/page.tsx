@@ -86,16 +86,17 @@ export default function LandingPage() {
 
           return () => observer.disconnect();
   }, []);
- 
+
   useEffect(() => {
     const existing = document.getElementById('landing-styles');
     if (!existing) {
     const style = document.createElement('style');
-    style.id = 'landing-styles';
-    style.textContent = pageStyles;
-    document.head.appendChild(style);
-    }
-    }, []);
+   style.id = 'landing-styles';
+   style.textContent = pageStyles;
+   document.head.appendChild(style);
+                   }
+             }, []);
+
 
 
  return (

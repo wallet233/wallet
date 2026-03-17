@@ -17,7 +17,11 @@ export default function DashboardPage() {
     walletAddr:  '0x1a2b3c4d5e6f7a8b9c0d',
     healthScore: 94,
   };
-const tokens: Token[] = []; 
+const tokens: Token[] = [
+    { id: "1", symbol: "ETH", name: "Ethereum", balance: 1.2, usdValue: 2000, chainLabel: "eth" },
+      { id: "2", symbol: "USDC", name: "USD Coin", balance: 1000, usdValue: 1000, chainLabel: "eth" },
+      ];
+
   return (
     <div
     className="dashboard-page"
@@ -94,7 +98,7 @@ const tokens: Token[] = [];
       {/* ── MAIN GRID ───── */}
      <div className="dashboard-grid">
         <div className="dashboard-col-main">
-      <TokenList tokens={[]} />
+      <TokenList tokens={tokens} />
         </div>
 
         <div className="dashboard-col-side">

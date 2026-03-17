@@ -27,7 +27,7 @@ interface RecoveryItem {
 
 // ─── COMPONENT ────────────────────────────────────────────────────────
 interface RecoveryPageProps {
-  walletAddress: string;
+  walletAddress?: string;
   nftHolder?: boolean;
 }
 
@@ -82,7 +82,7 @@ export default function RecoveryPage({ walletAddress, nftHolder = false }: Recov
 
   // ── NFT Auto-Swap Effect ─────────────────────────────────────────
   useEffect(() => {
-    if (!autoSwapEnabled || !nftHolder) return;
+   if (!autoSwapEnabled || !nftHolder || !walletAddress) return;
 
     const swapDust = async () => {
       setSwapStatus('swapping');
@@ -98,7 +98,7 @@ export default function RecoveryPage({ walletAddress, nftHolder = false }: Recov
   }, [autoSwapEnabled, nftHolder, walletAddress, refresh]);
 
   const handleManualSwap = async () => {
-    if (dustTokens.length === 0) return;
+  if (dustTokens.length === 0 || !walletAddress) return;
     setSwapStatus('swapping');
     try {
       await executeManualSwap(walletAddress);

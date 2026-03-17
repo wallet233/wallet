@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import '../../styles/landing.css';
 
 // ─── TYPES ────────────────────────────────────────────────────────────
 type TabId =
