@@ -1,4 +1,38 @@
-/* ────────── RECOVERY PAGE WRAPPER ────────── */
+
+:root {
+--blue: #007bff;     
+--blue-dim: #e7f1ff;  
+--radius-pill: 40px;  
+}
+
+
+.art-chip {
+padding: 8px 18px;
+border-radius: var(--radius-pill);
+border: 1.5px solid #ddd;
+background: #f5f5f5;
+cursor: pointer;
+color: #333;
+transition: background 0.1s ease;
+}
+
+
+.art-chip--active {
+background-color: var(--blue) !important; 
+color: white !important;
+border-color: var(--blue) !important;
+}
+
+.art-chip:focus {
+outline: none; 
+}
+
+.toggle-track.on {
+background-color: var(--blue) !important;
+}
+
+
+/*─────── RECOVERY PAGE WRAPPER ────────── */
 .recovery-page {
   width: 100%;
   max-width: 1400px;
@@ -154,4 +188,52 @@
     padding-left: 3rem;
     padding-right: 3rem;
   }
+}
+
+.art-chip {
+padding: 0.5rem 1rem;
+border-radius: var(--radius-pill);
+border: 1px solid #ddd;
+background: #f5f5f5;
+cursor: pointer;
+transition: all 0.2s ease;
+}
+
+.art-chip--active { 
+background: var(--blue) !important;
+color: white !important;
+border-color: var(--blue);
+}
+
+
+.toggle-track {
+width: 40px;
+height: 20px;
+background: #ccc;
+border-radius: 20px;
+position: relative;
+transition: background 0.3s;
+}
+
+.toggle-track.on {
+background: var(--blue); 
+}
+
+.toggle-thumb {
+width: 16px;
+height: 16px;
+background: white;
+border-radius: 50%;
+position: absolute;
+top: 2px;
+left: 2px;
+transition: transform 0.3s;
+}
+
+.toggle-track.on .toggle-thumb {
+transform: translateX(20px);
+}
+
+button:focus {
+outline: none; 
 }
