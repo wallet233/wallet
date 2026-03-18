@@ -89,7 +89,7 @@ const handleChange = (updates: Partial<AutoRecoveryConfig> = {}) => {
      minDustUsd,
      targetToken,
      autoCompound,
-   // Overwrite with the NEW values being clicked
+ 
      ...updates 
        });
        };
@@ -115,7 +115,11 @@ return (
 </div>
 <button
 className={`toggle-track ${enabled ? 'on' : ''}`}
-onClick={() => { setEnabled(prev => !prev); handleChange() }}
+onClick={() => { 
+    const nextEnabled = !enabled;
+    setEnabled(nextEnabled); 
+    handleChange({ enabled: nextEnabled }); 
+    }}
 aria-label={enabled ? 'Disable auto recovery' : 'Enable auto recovery'}
 style={{ border: 'none', cursor: 'pointer', flexShrink: 0 }}
 >
