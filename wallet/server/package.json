@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@prisma/client": "^7.5.0",
+    "@prisma/config": "^7.5.0",
     "cors": "*",
     "ethers": "^6.16.0",
     "express": "*",

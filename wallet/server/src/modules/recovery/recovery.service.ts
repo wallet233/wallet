@@ -1,15 +1,32 @@
-import { detectDustTokens } from './dustCalculator.js'
-import { swapDustToETH } from '../../transactions/swapExecutor.js'
+import { detectDustTokens } from './dustCalculator.js';
+import { getSmartRescueQuote } from '../../transactions/swapExecutor.js';
 
 export async function executeDustRecovery(walletAddress: string) {
-  // 1. Detect dust
-  const dustTokens = await detectDustTokens(walletAddress)
-  if (!dustTokens.length) return { recovered: 0, message: "No dust tokens found" }
+  // 1. Find profitable dust across all 50+ chains
+  const rawDust = await detectDustTokens(walletAddress);
 
-  // 2. Swap dust tokens
-  const swapped = await swapDustToETH(walletAddress, dustTokens)
+  // ✅ Fix: Filter out any null/undefined entries to satisfy TypeScript
+  const dustTokens = rawDust.filter((t): t is NonNullable<typeof t> => t !== null);
 
-  // 3. Calculate fee
-  const fee = swapped.total * 0.0125 // 1.25% for auto recovery
-  return { recovered: swapped.total - fee, fee, tokens: dustTokens }
+  if (dustTokens.length === 0) {
+    return { 
+      success: true, 
+      message: 'No profitable dust found after gas calculation', 
+      plans: [] 
+    };
+  }
+
+  // 2. Apply our Smart-Fee Logic (5% if user has gas, 7.2% if gasless relay)
+  const rescuePlans = await getSmartRescueQuote(walletAddress, dustTokens);
+
+  return {
+    success: true,
+    wallet: walletAddress,
+    summary: {
+      tokensFound: dustTokens.length,
+      totalChains: new Set(dustTokens.map(t => t.chain)).size
+    },
+    plans: rescuePlans,
+    timestamp: new Date().toISOString()
+  };
 }

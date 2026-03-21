@@ -1,15 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 
-const globalForPrisma = global as unknown as {
-  prisma: PrismaClient | undefined;
-};
+// Standard initialization. No arguments.
+// The engine will pull DATABASE_URL from process.env automatically.
+const prisma = new PrismaClient();
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: ['error', 'warn'],
-  });
-
-if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = prisma;
-}
+export default prisma;

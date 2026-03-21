@@ -1,11 +1,12 @@
 import express from 'express';
-import { processPayment } from './payment.controller.js';
+import { startPayment, confirmPayment } from './payment.controller.js';
 
 const paymentRouter = express.Router();
 
-paymentRouter.post('/pay', processPayment);
+paymentRouter.post('/intent', startPayment);
+paymentRouter.post('/confirm', confirmPayment);
 
-export const routeConfig = {
+export const paymentRoutes = {
   path: '/payment',
   router: paymentRouter,
 };
