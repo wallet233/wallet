@@ -10,7 +10,7 @@ async function main() {
   const adapter = new PrismaPg(pool)
   const prisma = new PrismaClient({ adapter })
 
-  console.log('🚀 Starting Full CRUD Test with 3-minute delay...')
+  console.log(' Test with 3-minute delay...')
 
   try {
     // 1. CREATE DATA
@@ -22,7 +22,7 @@ async function main() {
         plan: 'PREMIUM'
       }
     })
-    console.log('✅ Created ApiKey:', newKey.id)
+    console.log(' Created ApiKey:', newKey.id)
 
     const newPayment = await prisma.payment.create({
       data: {
@@ -32,7 +32,7 @@ async function main() {
         txHash: '0xHash_' + Date.now()
       }
     })
-    console.log('✅ Created Payment:', newPayment.id)
+    console.log(' Created Payment:', newPayment.id)
 
     // 2. WAIT
     console.log('\n--- PHASE 2: WAITING 3 MINUTES ---')
@@ -50,14 +50,14 @@ async function main() {
     // 3. DELETE DATA
     console.log('\n--- PHASE 3: CLEANING UP ---')
     await prisma.apiKey.delete({ where: { id: newKey.id } })
-    console.log('🗑️ Deleted ApiKey.')
+    console.log(' Deleted ApiKey.')
 
     await prisma.payment.delete({ where: { id: newPayment.id } })
-    console.log('🗑️ Deleted Payment.')
+    console.log(' Deleted Payment.')
 
-    console.log('\n✨ Test finished successfully!')
+    console.log('\n Test finished successfully!')
   } catch (e) {
-    console.error('\n❌ Test failed!', e)
+    console.error('\n Test failed!', e)
   } finally {
     await prisma.$disconnect()
     await pool.end()
