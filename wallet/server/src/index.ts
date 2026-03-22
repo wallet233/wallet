@@ -6,16 +6,19 @@ import morgan from 'morgan';
 import { env, validateEnv } from './config/env.js';
 import { logger } from './utils/logger.js';
 import { loadRoutes } from './core/routeLoader.js';
+import { connectDB } from './config/database.js';
 
-// ─── WORKER IMPORTS ────────────────────────────
+// ─── WORKER & OBSERVER IMPORTS ─────────────────
 import { startAutoBurnWorker } from './workers/autoBurnWorker.js';
 import { startDustWorker } from './workers/dustRecoveryWorker.js';
 import { startSpamWorker } from './workers/spamSweepWorker.js';
 import { startHealthWorker } from './workers/walletHealthWorker.js';
+import { startPaymentListener } from './modules/payment/payment.listener.js';
 
 (async () => {
-  // 1. Validate Environment before anything else
+  // 1. Pre-flight Checks
   validateEnv();
+  await connectDB();
 
   const app = express();
 
@@ -25,37 +28,33 @@ import { startHealthWorker } from './workers/walletHealthWorker.js';
   app.use(express.json());
   app.use(morgan('dev'));
 
-  // 3. System Heartbeats (The "Live" Engine)
+  // 3. Heartbeats & Observers (The "Live" Engine)
   startAutoBurnWorker();
   startDustWorker();
   startSpamWorker();
   startHealthWorker();
+  startPaymentListener(); // This watches for your 5% / 7.5% revenue
 
-  // 4. Health Check
+  // 4. Dynamic Route Loading
+  await loadRoutes(app);
+
+  // 5. Root Health Check
   app.get('/', (_, res) => {
     res.json({ 
       status: 'ONLINE', 
-      engine: 'WIP-Tier-1', 
+      version: '1.1.1-HEAVY',
       timestamp: new Date().toISOString() 
     });
   });
 
-  // 5. Dynamic Route Loading
-  await loadRoutes(app);
-
   // 6. Global Error Boundary
   app.use((err: any, _req: any, res: any, _next: any) => {
     logger.error(`[Fatal] ${err.message}`);
-    res.status(500).json({
-      success: false,
-      error: 'Internal Server Error',
-      message: env.isDev ? err.message : undefined
-    });
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
   });
 
-  // 7. Start Server
+  // 7. Boot
   app.listen(env.port, () => {
     logger.info(`🚀 WIP Backend Live on Port ${env.port}`);
-    logger.info(`Network: ${env.isDev ? 'Development' : 'Production'}`);
   });
 })();

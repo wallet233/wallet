@@ -1,5 +1,5 @@
 import express from 'express';
-import { scanSecurityController } from './security.controller';
+import { scanSecurityController } from './security.controller.js';
 
 const router = express.Router();
 

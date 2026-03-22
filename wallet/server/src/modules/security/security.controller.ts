@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { isAddress } from 'ethers';
-import { securityService } from './security.service';
-import { logger } from '../../utils/logger';
+import { securityService } from './security.service.js';
+import { logger } from '../../utils/logger.js';
 
 export async function scanSecurityController(req: Request, res: Response) {
   const address = (req.query.address || req.body.address) as string;

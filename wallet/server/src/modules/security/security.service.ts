@@ -1,6 +1,6 @@
 import { getAddress, formatUnits } from 'ethers';
-import { getAlchemyUrl } from '../../blockchain/provider';
-import { logger } from '../../utils/logger';
+import { getAlchemyUrl } from '../../blockchain/provider.js';
+import { logger } from '../../utils/logger.js';
 
 export interface Allowance {
   tokenAddress: string;

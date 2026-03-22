@@ -35,10 +35,13 @@ model RecoveryAttempt {
 }
 
 model Wallet {
-  address    String   @id
-  balance    String
-  lastSynced DateTime @default(now())
+  address     String   @id
+  balance     String
+  healthScore Int      @default(100)
+  riskLevel   String   @default("LOW")
+  lastSynced  DateTime @default(now())
 }
+
 
 model AutomationRule {
   id            Int      @id @default(autoincrement())
