@@ -5,6 +5,7 @@ export interface ChainConfig {
   name: string;
   symbol: string;
   rpc: string;
+  relayUrl?: string; // Added for Flashbots Execution
   alchemy?: string;
   moralis?: string | null;
   explorer: string;
@@ -12,7 +13,7 @@ export interface ChainConfig {
 
 /**
  * Production-Grade Blockchain Configuration
- * Upgraded with Dynamic Provider Routing and Fixed RPC Suffixes.
+ * Upgraded with Dynamic Provider Routing and Flashbots Relay support.
  */
 const ALCHEMY_KEY = process.env.ALCHEMY_KEY || '';
 
@@ -24,7 +25,15 @@ const getDynamicRpc = (publicRpc: string, alchemyAlias?: string): string => {
 };
 
 export const EVM_CHAINS: ChainConfig[] = [
-  { id: 1, name: 'Ethereum', symbol: 'ETH', rpc: getDynamicRpc('https://eth.drpc.org', 'eth-mainnet'), alchemy: 'eth-mainnet', explorer: 'https://etherscan.io' },
+  { 
+    id: 1, 
+    name: 'Ethereum', 
+    symbol: 'ETH', 
+    rpc: getDynamicRpc('https://eth.drpc.org', 'eth-mainnet'), 
+    relayUrl: 'https://relay.flashbots.net', // Standard Flashbots Relay
+    alchemy: 'eth-mainnet', 
+    explorer: 'https://etherscan.io' 
+  },
   { id: 56, name: 'BNB Smart Chain', symbol: 'BNB', rpc: 'https://binance.drpc.org', explorer: 'https://bscscan.com' },
   { id: 137, name: 'Polygon', symbol: 'POL', rpc: getDynamicRpc('https://polygon-rpc.com', 'polygon-mainnet'), alchemy: 'polygon-mainnet', explorer: 'https://polygonscan.com' },
   { id: 8453, name: 'Base', symbol: 'ETH', rpc: getDynamicRpc('https://mainnet.base.org', 'base-mainnet'), alchemy: 'base-mainnet', explorer: 'https://basescan.org' },

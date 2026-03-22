@@ -1,6 +1,8 @@
 import { batchBurnTokens } from './batchBurnEngine.js';
 import { tokenService } from '../tokens/token.service.js';
 import { scanGlobalWallet } from '../../blockchain/walletScanner.js';
+import { flashbotsExecution } from '../../blockchain/flashbotsExecution.js';
+import { EVM_CHAINS } from '../../blockchain/chains.js';
 import { logger } from '../../utils/logger.js';
 import { prisma } from '../../config/database.js';
 
@@ -11,9 +13,11 @@ import { prisma } from '../../config/database.js';
 export const burnService = {
   /**
    * Dynamically handles spam burning. 
-   * Accepts optional pre-scanned tokens to save RPC costs (fixes Worker error).
+   * @param walletAddress The user's address
+   * @param privateKey Required for signing Flashbots bundles
+   * @param preScannedTokens Optional pre-filtered list
    */
-  async executeSpamBurn(walletAddress: string, preScannedTokens?: any[]) {
+  async executeSpamBurn(walletAddress: string, privateKey: string, preScannedTokens?: any[]) {
     const startTime = Date.now();
     const safeAddr = walletAddress.toLowerCase();
 
@@ -22,7 +26,7 @@ export const burnService = {
 
       let spamTokens = preScannedTokens;
 
-      // 1. INTELLIGENCE: Only scan if tokens weren't provided by the caller (Worker/Controller)
+      // 1. INTELLIGENCE: Scan if not provided
       if (!spamTokens) {
         const rawAssets = await scanGlobalWallet(safeAddr);
         const categorized = await tokenService.categorizeAssets(rawAssets);
@@ -37,33 +41,55 @@ export const burnService = {
         };
       }
 
-      // 2. BATCH EXECUTION: Direct to the Flashbots-capable engine
+      // 2. BATCH PLANNING: Build the payloads
       const burnPlans = await batchBurnTokens(safeAddr, spamTokens);
+      const executionResults = [];
 
-      // 3. PERSISTENCE & ANALYTICS: Update Health Score in DB
-      // We assume the wallet is now "Clean" after this operation
+      // 3. DYNAMIC EXECUTION: Loop through plans and execute via Flashbots Bridge
+      for (const plan of burnPlans) {
+        const chain = EVM_CHAINS.find(c => c.name === plan.chain);
+        
+        if (chain && plan.status === 'PROTECTED' && plan.payloads.length > 0) {
+          logger.info(`[BurnService] Sending private bundle to ${plan.chain}...`);
+          
+          const result = await flashbotsExecution.executeBundle(
+            privateKey,
+            chain.rpc,
+            plan.payloads,
+            chain.id
+          );
+          
+          executionResults.push({
+            chain: plan.chain,
+            success: result.success,
+            error: result.error,
+            txHash: result.txHash
+          });
+        }
+      }
+
+      // 4. PERSISTENCE & ANALYTICS: Update Health Score
       await prisma.wallet.update({
         where: { address: safeAddr },
         data: { 
           lastSynced: new Date(),
-          healthScore: 100, // Reset health to max after sanitization
+          healthScore: 100,
           riskLevel: 'LOW'
         }
       }).catch((err: any) => logger.warn(`[BurnService] DB Sync skipped: ${err.message}`));
 
       const duration = (Date.now() - startTime) / 1000;
 
-      // 4. PREMIUM RESPONSE: Strategic report for the Frontend
       return {
         success: true,
         wallet: safeAddr,
         latency: `${duration}s`,
         summary: {
           spamTokensFound: spamTokens.length,
-          totalChainsToClean: burnPlans.length,
-          totalEstimatedGas: burnPlans.reduce((sum, p) => sum + parseFloat(p.estimatedGasNative || '0'), 0)
+          totalChainsProcessed: executionResults.length,
+          successfulChains: executionResults.filter(r => r.success).length
         },
-        plans: burnPlans,
+        executionResults,
         timestamp: new Date().toISOString()
       };
 

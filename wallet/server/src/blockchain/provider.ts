@@ -22,19 +22,23 @@ const ALCHEMY_NETWORKS: Record<string, string> = {
  * Automatically maps standard chain names to Alchemy-specific subdomains.
  */
 export function getAlchemyUrl(network: string): string | null {
-  const apiKey = process.env.ALCHEMY_API_KEY;
+  const apiKey = process.env.ALCHEMY_API_KEY || process.env.ALCHEMY_KEY;
   if (!apiKey) return null;
 
-  // Clean the input to match our mapping keys
   const cleanName = network.toLowerCase().trim();
-  const slug = ALCHEMY_NETWORKS[cleanName] || `${cleanName}-mainnet`;
   
+  // If the input is already an Alchemy URL, return it
+  if (network.includes('alchemy.com')) return network;
+
+  // Use mapping or fallback to slug-mainnet pattern
+  const slug = ALCHEMY_NETWORKS[cleanName] || `${cleanName}-mainnet`;
   return `https://${slug}.g.alchemy.com/v2/${apiKey}`;
 }
 
 /**
  * Heavy-Duty Provider Factory
  * Optimizations: 5s Timeouts, Static Network (2x faster), and Provider Caching.
+ * Uses latest ethers (6.16.0) features.
  */
 export function getProvider(rpcOrNetwork: string): JsonRpcProvider {
   if (providerCache.has(rpcOrNetwork)) {
@@ -56,6 +60,7 @@ export function getProvider(rpcOrNetwork: string): JsonRpcProvider {
     request.timeout = 5000; 
 
     // staticNetwork: true avoids extra eth_chainId calls on every request
+    // This is vital for high-speed recovery scanning
     const provider = new JsonRpcProvider(request, undefined, {
       staticNetwork: true,
     });
@@ -74,7 +79,7 @@ export function getProvider(rpcOrNetwork: string): JsonRpcProvider {
 export async function isProviderHealthy(provider: JsonRpcProvider): Promise<boolean> {
   try {
     const timeout = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Timeout')), 3000)
+      setTimeout(() => reject(new Error('Provider Timeout')), 3000)
     );
     // Race the block number fetch against a 3s timeout
     await Promise.race([provider.getBlockNumber(), timeout]);

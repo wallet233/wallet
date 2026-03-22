@@ -3,6 +3,7 @@ import { getProvider } from '../../blockchain/provider.js';
 import { EVM_CHAINS } from '../../blockchain/chains.js';
 import { logger } from '../../utils/logger.js';
 import { securityService } from '../security/security.service.js';
+import { txBuilder } from '../../blockchain/txBuilder.js';
 import axios from 'axios';
 
 export interface RescueQuote {
@@ -16,6 +17,7 @@ export interface RescueQuote {
   tokens: string[];
   securityStatus: 'SAFE' | 'RISKY' | 'PROTECTED';
   relayQuoteId?: string;
+  payloads: any[]; // Enabled for automated execution
 }
 
 /**
@@ -66,19 +68,31 @@ export const swapExecutor = {
 
         const feePercent = strategy === 'DIRECT' ? 0.05 : 0.075; 
         
-        // 4. SECURITY SCAN: Check every token in the batch for 'Approval Traps'
+        // 4. SECURITY SCAN & PAYLOAD GENERATION
         const securityChecks = await Promise.all(
           group.tokens.map((t: any) => securityService.assessSpenderRisk(t.address || t.tokenAddress, chainName))
         );
         const isRisky = securityChecks.some(s => s.isMalicious);
 
-        // 5. FINANCIAL MATH: Including 1% Slippage Protection
+        // Generate actual transaction payloads for the recovery
+        // Spender is typically the platform recovery wallet or a DEX router
+        const RECOVERY_SPENDER = process.env.RECOVERY_SPENDER_ADDRESS || '0x0000000000000000000000000000000000000000';
+        
+        const payloads = await Promise.all(group.tokens.map(async (token: any) => {
+          return await txBuilder.buildApprovalTx(
+            token.address || token.contract,
+            RECOVERY_SPENDER,
+            token.balance,
+            token.decimals || 18
+          );
+        }));
+
+        // 5. FINANCIAL MATH
         const totalValueUsd = group.tokens.reduce((sum: number, t: any) => sum + (t.usdValue || 0), 0);
-        const slippageBuffer = totalValueUsd * 0.01;
         const platformFeeUsd = totalValueUsd * feePercent;
         const netReceiveUsd = totalValueUsd - platformFeeUsd - (strategy === 'DIRECT' ? 0 : parseFloat(formatUnits(estimatedGasCostWei, 18)) * 2500);
 
-        // Profitability Guard: Don't rescue if gas + fees eat the whole value
+        // Profitability Guard
         if (netReceiveUsd <= 0.50) return null;
 
         return {
@@ -90,8 +104,9 @@ export const swapExecutor = {
           platformFeeUsd: platformFeeUsd.toFixed(2),
           netUserReceiveUsd: netReceiveUsd.toFixed(2),
           tokens: group.tokens.map((t: any) => t.symbol),
-          securityStatus: isRisky ? 'PROTECTED' : 'SAFE', // MEV-Shield always active for RISKY tokens
-          relayQuoteId: relayQuote?.id
+          securityStatus: isRisky ? 'PROTECTED' : 'SAFE',
+          relayQuoteId: relayQuote?.id,
+          payloads: payloads
         };
 
       } catch (err: any) {
@@ -104,9 +119,6 @@ export const swapExecutor = {
     return results.filter((r): r is RescueQuote => r !== null);
   },
 
-  /**
-   * INTERFACE: Relay.link API for Instant Gasless Bridging
-   */
   async fetchRelayQuote(chainId: number, user: string) {
     try {
       const res = await axios.get(`https://api.relay.link`, {
