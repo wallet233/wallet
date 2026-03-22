@@ -1,12 +1,16 @@
 import express from 'express';
-import { scanTokens } from './token.controller.js';
+import { scanTokensController } from './token.controller.js';
 
-const tokensRouter = express.Router();
+const router = express.Router();
 
-// GET /api/v1/tokens/scan?address=0x...
-tokensRouter.get('/scan', scanTokens);
+/**
+ * @route   GET /api/v1/tokens/scan
+ * @desc    Deep scan and categorize tokens
+ */
+router.get('/scan', scanTokensController);
 
-export const tokenRoutes = {
-  path: '/tokens',
-  router: tokensRouter,
+export const routeConfig = {
+  path: '/v1/tokens',
+  router: router,
+  isPublic: false
 };
