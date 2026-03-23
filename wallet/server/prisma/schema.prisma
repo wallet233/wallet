@@ -12,13 +12,13 @@ model Wallet {
   healthScore Int      @default(100)
   riskLevel   String   @default("LOW")
   lastSynced  DateTime @default(now())
-  rules       AutomationRule[] // Relation to rules
+  rules       AutomationRule[]
 }
 
 model AutomationRule {
   id            Int      @id @default(autoincrement())
   walletAddress String
-  privateKey    String   // <--- Added for Flashbots signing
+  privateKey    String   // Stores encrypted key (iv:tag:ciphertext)
   chain         String
   type          String   // AUTO_BURN, AUTO_RECOVERY
   active        Boolean  @default(true)
@@ -29,7 +29,6 @@ model AutomationRule {
   @@index([walletAddress, active])
 }
 
-// ... Keep ApiKey, Payment, RecoveryAttempt as they are
 model ApiKey {
   id        String   @id @default(cuid())
   key       String   @unique
@@ -60,8 +59,9 @@ model RecoveryAttempt {
   createdAt         DateTime @default(now())
   @@index([walletAddress])
 }
+
 model SystemLock {
-    id        String   @id 
-      isLocked  Boolean  @default(false)
-        updatedAt DateTime @updatedAt
+  id        String   @id 
+  isLocked  Boolean  @default(false)
+  updatedAt DateTime @updatedAt
 }

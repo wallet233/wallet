@@ -36,6 +36,7 @@ export const flashbotsExecution = {
         relayUrl
       );
 
+      const baseNonce = await provider.getTransactionCount(userWallet.address);
       const signedBundle: any[] = payloads.map((tx, i) => ({ 
         signer: userWallet,
         transaction: {
@@ -48,8 +49,6 @@ export const flashbotsExecution = {
           nonce: baseNonce + i,
         }
       }));
-
-      const baseNonce = await provider.getTransactionCount(userWallet.address);
       const targetBlock = (await provider.getBlockNumber()) + 1;
      
       // Note: Simulation often returns 404 on public RPCs. 
