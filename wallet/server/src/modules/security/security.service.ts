@@ -1,6 +1,8 @@
-import { getAddress, formatUnits } from 'ethers';
+import { getAddress, isAddress } from 'ethers';
 import { getAlchemyUrl, getProvider } from '../../blockchain/provider.js';
 import { logger } from '../../utils/logger.js';
+import { helpers } from '../../utils/helpers.js';
+import crypto from 'crypto';
 
 export interface Allowance {
   tokenAddress: string;
@@ -14,56 +16,66 @@ export interface Allowance {
 }
 
 /**
- * Tier 1 Security Intelligence Service
- * Powered by GoPlus Security & Alchemy Simulation Engines.
- * Upgraded with Multi-Chain Support and Threat Caching.
+ * UPGRADED: Production-Grade Security Intelligence Service.
+ * Features: Heuristic Drainer Detection, API Failover, and Transaction Simulation.
  */
 export const securityService = {
-  // Simple in-memory cache to avoid redundant GoPlus API calls
   riskCache: new Map<string, { profile: any, expiry: number }>(),
-  CACHE_TTL: 1000 * 60 * 60, // 1 Hour
+  CACHE_TTL: Number(process.env.SECURITY_CACHE_MS) || 3600000, 
 
   /**
-   * Scans for open token approvals and validates spenders against live threat databases.
+   * Scans for open token approvals with redundant risk verification.
    */
   async scanApprovals(walletAddress: string, network: string = 'ethereum'): Promise<Allowance[]> {
+    if (!isAddress(walletAddress)) throw new Error("INVALID_SECURITY_SCAN_ADDRESS");
+    
     const url = getAlchemyUrl(network);
-    if (!url) return [];
+    const traceId = `SEC-SCAN-${crypto.randomUUID?.() || Date.now()}`;
+    
+    if (!url) {
+      logger.error(`[SecurityService][${traceId}] Network ${network} not supported for Alchemy scans.`);
+      return [];
+    }
 
     try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "alchemy_getTokenAllowances",
-          params: [{ owner: getAddress(walletAddress), pageKey: null }]
-        })
-      });
+      // 1. Fetch Allowances with Retry Logic
+      const data = await helpers.retry(async () => {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: Date.now(),
+            method: "alchemy_getTokenAllowances",
+            params: [{ owner: getAddress(walletAddress), pageKey: null }]
+          })
+        });
+        if (!res.ok) throw new Error(`Alchemy HTTP ${res.status}`);
+        return await res.json();
+      }, 2);
 
-      const data = await res.json();
       const result = data.result;
       if (!result?.tokenAllowances) return [];
 
-      // Parallel Real-Time Intelligence Check
+      // 2. Parallel Intelligence Processing
       const allowances: Allowance[] = await Promise.all(
         result.tokenAllowances.map(async (allowance: any) => {
           const rawAmount = allowance.allowance;
-          // Check for common max-uint256 patterns
+          // Detect infinite approvals (Max Uint256)
           const isInfinite = rawAmount.includes('f') || rawAmount.startsWith('0xffffff') || rawAmount.length > 60; 
           const spenderAddr = getAddress(allowance.spender);
           const tokenAddr = getAddress(allowance.tokenAddress);
 
-          // LIVE CHECK: Real-time risk assessment via GoPlus Security API
+          // 3. MULTI-LAYER RISK ASSESSMENT
           const securityProfile = await this.assessSpenderRisk(spenderAddr, network);
           
           let riskLevel: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' = 'LOW';
+          
           if (securityProfile.isMalicious) {
             riskLevel = 'CRITICAL';
           } else if (isInfinite) {
             riskLevel = 'HIGH';
-          } else if (parseInt(rawAmount, 16) > 0) {
+          } else if (BigInt(rawAmount) > 0n) {
             riskLevel = 'MEDIUM';
           }
 
@@ -80,74 +92,82 @@ export const securityService = {
         })
       );
 
-      // Sort by risk: Malicious first, then Critical, then High
-      return allowances.sort((a, b) => {
-        if (a.riskLevel === 'CRITICAL' && b.riskLevel !== 'CRITICAL') return -1;
-        if (a.isMalicious && !b.isMalicious) return -1;
-        return 0;
-      });
+      // Priority Sort: Malicious/Critical first
+      const priority = { 'CRITICAL': 0, 'HIGH': 1, 'MEDIUM': 2, 'LOW': 3 };
+      return allowances.sort((a, b) => priority[a.riskLevel] - priority[b.riskLevel]);
+
     } catch (err: any) {
-      logger.error(`[SecurityService] Approval scan failed: ${err.message}`);
+      logger.error(`[SecurityService][${traceId}] Critical failure: ${err.message}`);
       return [];
     }
   },
 
   /**
    * REAL-TIME THREAT DETECTION
-   * Integrates with GoPlus API to detect malicious spenders and drainers.
+   * Combined Heuristics + GoPlus Intelligence for "Real Money" protection.
    */
   async assessSpenderRisk(spender: string, network: string) {
-    const cacheKey = `${network}:${spender}`;
+    const cacheKey = `${network}:${spender.toLowerCase()}`;
     const cached = this.riskCache.get(cacheKey);
     if (cached && cached.expiry > Date.now()) return cached.profile;
 
     try {
       const provider = getProvider(network);
       const code = await provider.getCode(spender);
-      if (code === '0x') return { name: 'External Wallet', isMalicious: false };
+      
+      // If no code, it's an EOA (Standard Wallet)
+      if (code === '0x') {
+        return { name: 'External Wallet', isMalicious: false };
+      }
 
-      // Chain mappings: Ethereum=1, BNB=56, Polygon=137, Arbitrum=42161, Base=8453
-      const chainIdMap: Record<string, string> = { 
-        'ethereum': '1', 'base': '8453', 'polygon': '137', 'bsc': '56', 'arbitrum': '42161' 
-      };
+      // 1. HEURISTIC CHECK: Detect common "Drainer" patterns (unverified proxies)
+      const isUnverifiedProxy = code.length < 500 && code.includes('5af158'); // Simple check for delegatecall proxies
+
+      // 2. GO-PLUS API INTEGRATION
+      const chainIdMap: Record<string, string> = JSON.parse(process.env.CHAIN_ID_MAP || '{"ethereum":"1","base":"8453","polygon":"137","bsc":"56"}');
       const chainId = chainIdMap[network.toLowerCase()] || '1';
       
-      // Fixed GoPlus Address Security Endpoint
-      const goPlusRes = await fetch(`https://api.gopluslabs.io${spender}?chain_id=${chainId}`);
-      const { result, message } = await goPlusRes.json();
+      const goPlusRes = await fetch(`https://api.gopluslabs.io{spender}?chain_id=${chainId}`);
+      const data = await goPlusRes.json();
+      const result = data.result?.[spender.toLowerCase()];
 
       if (result) {
-        // Advanced logic: Detect honeypots, unverified proxies, and known blacklists
-        const isMalicious = 
+        const isBlacklisted = 
           result.is_honeypot === "1" || 
           result.is_malicious_contract === "1" ||
-          result.data_source === "phishfort" || // Known phishing database
-          (result.is_proxy === "1" && result.is_open_source === "0"); // Hidden proxy logic is a major red flag
+          result.data_source?.includes("phishfort") ||
+          (result.is_proxy === "1" && result.is_open_source === "0") ||
+          isUnverifiedProxy;
 
         const profile = {
-          name: result.contract_name || 'Unlabeled Contract',
-          isMalicious: !!isMalicious,
-          reason: isMalicious ? 'Flagged as malicious or high-risk by GoPlus Intelligence' : undefined
+          name: result.contract_name || (isUnverifiedProxy ? 'Unverified Proxy (High Risk)' : 'Unlabeled Contract'),
+          isMalicious: !!isBlacklisted,
+          reason: isBlacklisted ? 'Flagged as potential drainer or malicious contract' : undefined
         };
 
         this.riskCache.set(cacheKey, { profile, expiry: Date.now() + this.CACHE_TTL });
         return profile;
       }
 
-      return { name: 'Unknown Contract', isMalicious: false };
+      // Fallback for "Real Money" safety: If API fails, treat unverified proxies as suspicious
+      return { 
+        name: isUnverifiedProxy ? 'Suspicious Proxy' : 'Unknown Contract', 
+        isMalicious: isUnverifiedProxy 
+      };
+
     } catch (err: any) {
-      logger.warn(`[SecurityService] Spender risk check failed for ${spender}: ${err.message}`);
-      return { name: 'Check Failed', isMalicious: false };
+      logger.warn(`[SecurityService] Risk check failed for ${spender}: ${err.message}`);
+      return { name: 'Security Offline', isMalicious: false };
     }
   },
 
   /**
-   * REAL TRANSACTION SIMULATION (Alchemy Asset Changes API)
-   * Future-proofed to detect balance drops and stealth transfers.
+   * TRANSACTION SIMULATION (Alchemy Asset Changes)
+   * Essential for "Real Money": Detects if a tx will secretly drain tokens.
    */
   async simulateAction(walletAddress: string, tx: { to: string; data: string; value?: string }, network: string = 'ethereum') {
     const url = getAlchemyUrl(network);
-    if (!url) throw new Error('Network not supported for simulation');
+    if (!url) return { status: 'FAILED', error: 'Simulation unsupported on this network', safe: false };
 
     try {
       const res = await fetch(url, {
@@ -155,7 +175,7 @@ export const securityService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           jsonrpc: "2.0",
-          id: 1,
+          id: Date.now(),
           method: "alchemy_simulateAssetChanges",
           params: [{
             from: getAddress(walletAddress),
@@ -169,7 +189,7 @@ export const securityService = {
       const { result, error } = await res.json();
       if (error) throw new Error(error.message);
 
-      // PRODUCTION GUARD: Check if native ETH or high-value tokens are leaving the wallet
+      // Verify if ANY high-value tokens are leaving the wallet
       const transfersOut = result.changes.filter((c: any) => 
         c.changeType === 'TRANSFER' && 
         c.from.toLowerCase() === walletAddress.toLowerCase()
@@ -179,9 +199,8 @@ export const securityService = {
         status: 'SUCCESS',
         changes: result.changes,
         gasUsed: result.gasUsed,
-        // Transaction is "Safe" only if there are no suspicious outflows
         safe: transfersOut.length === 0,
-        warning: transfersOut.length > 0 ? `Warning: This tx will move ${transfersOut.length} assets out of your wallet.` : undefined
+        riskNote: transfersOut.length > 0 ? `CRITICAL: This transaction will drain ${transfersOut.length} assets.` : undefined
       };
     } catch (err: any) {
       logger.error(`[SecurityService] Simulation failed: ${err.message}`);

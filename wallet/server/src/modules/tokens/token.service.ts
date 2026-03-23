@@ -1,36 +1,36 @@
 import { scanGlobalWallet } from '../../blockchain/walletScanner.js';
 import { classifyToken } from './spamDetector.js';
 import { logger } from '../../utils/logger.js';
+import crypto from 'crypto';
 
 /**
- * Production-grade Token Service
- * Upgraded for High-Value Asset Management:
- * - Anti-Phishing: Filters out malicious zero-value "bait" tokens.
- * - Performance: In-memory caching to respect RPC rate limits.
- * - Resilience: Atomic categorization with parallel execution.
+ * UPGRADED: Production-grade Token Service for High-Value Assets.
+ * Features: Size-limited caching (Anti-OOM), Type-safe Error Handling, and Audit Traceability.
  */
 export const tokenService = {
-  // 1-hour cache to prevent RPC overhead and API burnout
+  // 1. MEMORY SAFETY: Size-limited cache to prevent server crashes on large datasets
   cache: new Map<string, { data: any, timestamp: number }>(),
   CACHE_TTL: 1000 * 60 * 60,
+  MAX_CACHE_SIZE: 5000, // Prevents memory leaks in production
 
   /**
    * High-Performance Pipeline: Scan -> Classify -> Group
    */
   async fetchWalletTokens(address: string, forceRefresh = false) {
     const safeAddr = address.toLowerCase();
+    const traceId = `TOKEN-SCAN-${crypto.randomUUID?.() || Date.now()}`;
     
     // Check Cache first for production speed
     if (!forceRefresh && this.cache.has(safeAddr)) {
       const cached = this.cache.get(safeAddr)!;
       if (Date.now() - cached.timestamp < this.CACHE_TTL) {
-        logger.info(`[TokenService] Returning cached assets for ${safeAddr}`);
+        logger.info(`[TokenService][${traceId}] Returning cached assets for ${safeAddr}`);
         return cached.data;
       }
     }
 
     try {
-      logger.info(`[TokenService] Live-scanning on-chain assets: ${safeAddr}`);
+      logger.info(`[TokenService][${traceId}] Live-scanning on-chain assets: ${safeAddr}`);
       
       // 1. Get raw on-chain data from our multi-chain scanner
       const rawAssets = await scanGlobalWallet(safeAddr);
@@ -38,12 +38,17 @@ export const tokenService = {
       // 2. Perform categorization on the fetched assets
       const categorized = await this.categorizeAssets(rawAssets);
 
-      // 3. Update Cache
+      // 3. Update Cache with Size Management
+      if (this.cache.size >= this.MAX_CACHE_SIZE) {
+        const firstKey = this.cache.keys().next().value;
+        if (firstKey) this.cache.delete(firstKey); // FIFO eviction
+      }
+
       this.cache.set(safeAddr, { data: categorized, timestamp: Date.now() });
 
-      return categorized;
+      return { ...categorized, traceId };
     } catch (err: any) {
-      logger.error(`[TokenService] Fetch failed for ${safeAddr}: ${err.message}`);
+      logger.error(`[TokenService][${traceId}] Fetch failed for ${safeAddr}: ${err.message}`);
       throw err;
     }
   },
@@ -70,9 +75,11 @@ export const tokenService = {
             isSuspicious,
             lastVerified: new Date().toISOString()
           };
-        } catch (e) {
-          logger.warn(`[TokenService] Classification failed for ${asset.symbol || 'Unknown'}: ${e.message}`);
-          return { ...asset, status: 'unverified', usdValue: 0 };
+        } catch (e: any) {
+          // FIXED: Explicitly cast 'e' to any to resolve TS18046 'unknown' error
+          const errorMsg = e instanceof Error ? e.message : String(e);
+          logger.warn(`[TokenService] Classification failed for ${asset.symbol || 'Unknown'}: ${errorMsg}`);
+          return { ...asset, status: 'unverified', usdValue: 0, error: errorMsg };
         }
       })
     );
@@ -82,7 +89,7 @@ export const tokenService = {
     return {
       summary: {
         totalAssets: results.length,
-        totalUsdValue: results.reduce((sum, a) => sum + (a.usdValue || 0), 0),
+        totalUsdValue: Number(results.reduce((sum, a) => sum + (a.usdValue || 0), 0).toFixed(2)),
         dustCount: results.filter(a => a.status === 'dust').length,
         spamCount: results.filter(a => a.status === 'spam').length,
         riskScore: results.some(a => a.isSuspicious) ? 'ELEVATED' : 'LOW'

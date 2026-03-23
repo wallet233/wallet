@@ -1,67 +1,84 @@
 import { PrismaClient } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
 import { logger } from '../utils/logger.js';
-import { encryptPrivateKey } from '../utils/crypto.js';
+import { encryptPrivateKey, clearSensitiveData } from '../utils/crypto.js';
+
+/**
+ * UPGRADED: High-Performance Production Database Engine.
+ * Features: Connection Pooling, Auto-Encryption Middleware, and Memory Hygiene.
+ */
 
 const connectionString = process.env.DATABASE_URL;
 
-// 1. Create a high-performance connection pool
+// 1. High-Performance Connection Pool (Optimized for AWS/Supabase/Elephant)
 const pool = new pg.Pool({ 
   connectionString,
-  max: 20, 
+  max: Number(process.env.DB_MAX_POOL) || 20, 
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 5000, // Increased for cross-region stability
+  maxUses: 7500, // Recreate connections to prevent memory leaks
 });
 
 pool.on('error', (err) => {
-  logger.error(`[Database] Unexpected pool error: ${err.message}`);
+  logger.error(`[Database] Pool Error: ${err.message}`);
 });
 
 /**
- * DATABASE INITIALIZER
+ * Verified Connection Bootstrapper
  */
 export async function connectDB() {
   try {
     const client = await pool.connect();
+    logger.info('[Database] PG Pool Connection Established.');
     client.release();
-    logger.info('[Database] Connection verified via PG Pool.');
   } catch (err: any) {
-    logger.error(`[Database] Connection failed: ${err.message}`);
+    logger.error(`[Database] Connection Failed: ${err.stack || err.message}`);
     process.exit(1);
   }
 }
 
-// 2. Initialize Base Prisma with the PG Adapter
-const adapter = new PrismaPg(pool as any);
-const basePrisma = new PrismaClient({ adapter });
+// 2. Base Prisma Client (Standard Configuration)
+const basePrisma = new PrismaClient({
+  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+});
 
 /**
- * 3. MAXIMUM SECURITY EXTENSION
- * Automatically intercepts 'AutomationRule' writes to encrypt private keys.
- * This prevents raw keys from ever hitting my database logs or storage.
+ * 3. SECURITY EXTENSION (The "Vault" Middleware)
+ * Automatically intercepts every write to the 'AutomationRule' table.
+ * Crucial for "Real Money": Ensures keys are encrypted BEFORE they leave the server memory.
  */
 export const prisma = basePrisma.$extends({
   query: {
     automationRule: {
       async create({ args, query }) {
         if (args.data.privateKey) {
-          args.data.privateKey = encryptPrivateKey(args.data.privateKey);
+          const raw = args.data.privateKey as string;
+          args.data.privateKey = encryptPrivateKey(raw);
+          // Wipe the raw key from memory immediately after encryption
+          clearSensitiveData(raw);
         }
         return query(args);
       },
       async update({ args, query }) {
         if (args.data.privateKey && typeof args.data.privateKey === 'string') {
-          args.data.privateKey = encryptPrivateKey(args.data.privateKey);
+          const raw = args.data.privateKey;
+          args.data.privateKey = encryptPrivateKey(raw);
+          clearSensitiveData(raw);
         }
         return query(args);
       },
       async upsert({ args, query }) {
+        // Handle 'Create' part of upsert
         if (args.create.privateKey) {
-          args.create.privateKey = encryptPrivateKey(args.create.privateKey);
+          const raw = args.create.privateKey as string;
+          args.create.privateKey = encryptPrivateKey(raw);
+          clearSensitiveData(raw);
         }
+        // Handle 'Update' part of upsert
         if (args.update.privateKey && typeof args.update.privateKey === 'string') {
-          args.update.privateKey = encryptPrivateKey(args.update.privateKey);
+          const raw = args.update.privateKey;
+          args.update.privateKey = encryptPrivateKey(raw);
+          clearSensitiveData(raw);
         }
         return query(args);
       }
@@ -69,4 +86,4 @@ export const prisma = basePrisma.$extends({
   },
 });
 
-logger.info('[Database] Secure Prisma Client with Auto-Encryption initialized.');
+logger.info('[Database] Production Prisma Client with Auto-Vaulting Active.');

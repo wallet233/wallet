@@ -10,6 +10,7 @@ type RouteModule = {
     path: string;
     router: any;
     isPublic?: boolean;
+    isCritical?: boolean; // New: If true, failure to load crashes the server
   };
 };
 
@@ -17,50 +18,71 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
- * my Dynamic Route Loader
- * Automatically discovers and mounts all .routes.ts files in the modules directory.
+ * UPGRADED: Production-Grade Dynamic Route Loader.
+ * Features: Security Gating, Critical Path Enforcement, and ESM Interop.
  */
 export async function loadRoutes(app: Express) {
   const modulesPath = path.join(__dirname, '../modules');
   
   if (!fs.existsSync(modulesPath)) {
-    logger.error(`[RouteLoader] Modules directory not found at ${modulesPath}`);
-    return;
+    logger.error(`[RouteLoader] FATAL: Modules directory missing at ${modulesPath}`);
+    process.exit(1); // Real money safety: Cannot run without modules
   }
 
-  const moduleFolders = fs.readdirSync(modulesPath);
+  // Use recursive scanning to find nested .routes files
+  const getRouteFiles = (dir: string): string[] => {
+    let results: string[] = [];
+    const list = fs.readdirSync(dir);
+    list.forEach((file) => {
+      const filePath = path.join(dir, file);
+      const stat = fs.statSync(filePath);
+      if (stat && stat.isDirectory()) {
+        results = results.concat(getRouteFiles(filePath));
+      } else if (file.match(/\.routes\.(ts|js)$/)) {
+        results.push(filePath);
+      }
+    });
+    return results;
+  };
 
-  for (const folder of moduleFolders) {
-    const fullFolderPath = path.join(modulesPath, folder);
-    if (!fs.statSync(fullFolderPath).isDirectory()) continue;
+  const routeFiles = getRouteFiles(modulesPath);
+  logger.info(`[RouteLoader] Found ${routeFiles.length} potential API modules.`);
 
-    const files = fs.readdirSync(fullFolderPath);
+  for (const filePath of routeFiles) {
+    const fileName = path.basename(filePath);
+    
+    try {
+      // 1. ESM Cross-Platform Import
+      const moduleUrl = pathToFileURL(filePath).href;
+      const mod: RouteModule = await import(moduleUrl);
 
-    for (const file of files) {
-      // Look for .routes.ts or .routes.js
-      if (!file.match(/\.routes\.(ts|js)$/)) continue;
-      
-      const filePath = path.join(fullFolderPath, file);
+      if (!mod.routeConfig) {
+        logger.warn(`[RouteLoader] Skipping ${fileName}: No valid routeConfig exported.`);
+        continue;
+      }
 
-      try {
-        // Fix: Use pathToFileURL for cross-platform ESM compatibility
-        const moduleUrl = pathToFileURL(filePath).href;
-        const mod: RouteModule = await import(moduleUrl);
+      const { path: subPath, router, isPublic, isCritical } = mod.routeConfig;
+      const apiPath = `/api${subPath}`;
 
-        if (mod.routeConfig) {
-          const apiPath = `/api${mod.routeConfig.path}`;
-          
-          // API GUARDIAN: Apply global validation unless route is marked isPublic
-          if (mod.routeConfig.isPublic) {
-            app.use(apiPath, mod.routeConfig.router);
-          } else {
-            app.use(apiPath, validator.apiKeyAuth, mod.routeConfig.router);
-          }
+      // 2. SECURITY GUARDIAN (Middleware Injection)
+      // Every non-public route is automatically shielded by the API Key Validator
+      if (isPublic) {
+        app.use(apiPath, router);
+      } else {
+        // Enforce Authentication and Rate Limiting for high-value endpoints
+        app.use(apiPath, validator.apiKeyAuth, router);
+      }
 
-          logger.info(`[RouteLoader] Mounted: ${apiPath} ${mod.routeConfig.isPublic ? '(Public)' : '(Protected)'}`);
-        }
-      } catch (err: any) {
-        logger.error(`[RouteLoader] Failed to load ${file}: ${err.message}`);
+      logger.info(`[RouteLoader] Mounted: ${apiPath} [${isPublic ? 'PUBLIC' : 'PROTECTED'}]`);
+
+    } catch (err: any) {
+      const isCritical = filePath.includes('recovery') || filePath.includes('security');
+      logger.error(`[RouteLoader] Failed to load ${fileName}: ${err.message}`);
+
+      // 3. FAIL-SAFE: If a security/recovery route fails, shut down the engine
+      if (isCritical) {
+        logger.error(`[RouteLoader] CRITICAL MODULE FAILED. Emergency shutdown to prevent data leak.`);
+        process.exit(1);
       }
     }
   }

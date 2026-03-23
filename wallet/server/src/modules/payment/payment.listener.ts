@@ -1,73 +1,93 @@
 import { prisma } from '../../config/database.js';
 import { paymentService } from './payment.service.js';
 import { logger } from '../../utils/logger.js';
+import { mutex } from '../../utils/mutex.js';
+import { helpers } from '../../utils/helpers.js';
 
 /**
- * Premium Payment Observer (Worker)
- * Upgraded for Production: Features TTL (Time-To-Live), Retry Caps, and RPC Optimization.
+ * UPGRADED: Production-Grade Payment Observer.
+ * Features: Distributed Locking, Stale Transaction Expiry, and RPC Batching.
  */
 export async function startPaymentListener() {
-  logger.info('[Observer] Payment Lifecycle Monitor Initialized (15s Heartbeat)');
+  const HEARTBEAT_MS = 20000; // 20s interval for better RPC economy
+  const globalLockId = 'worker:payment_listener';
 
-  // Run every 15 seconds to catch new on-chain confirmations
+  logger.info(`[PaymentObserver] Starting high-fidelity monitor (${HEARTBEAT_MS}ms)`);
+
   setInterval(async () => {
+    const traceId = `PAY-OBS-${Date.now()}`;
+    
+    // 1. DISTRIBUTED LOCK: Ensure only one server instance is checking payments
+    const ownerId = await mutex.acquire(globalLockId, HEARTBEAT_MS);
+    if (!ownerId) return; // Another instance is already observing
+
     try {
-      // 1. FETCH ACTIVE TASKS
-      // Filter: Only check payments that have a TxHash, are unconfirmed, 
-      // and haven't exceeded 50 verification attempts (approx 12 mins).
+      // 2. FETCH PENDING TASKS
+      // Filter: Unconfirmed, has a hash, and is less than 2 hours old
       const pending = await prisma.payment.findMany({
         where: { 
           confirmed: false, 
+          status: { in: ['PENDING', 'PROCESSING'] },
           txHash: { not: null },
-          // Note: In your Prisma schema, ensure you have an 'attempts' Int @default(0)
-          // For now, we use createdAt to ignore transactions older than 1 hour (Stale)
-          createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) }
+          createdAt: { gte: new Date(Date.now() - 2 * 60 * 60 * 1000) }
         },
-        take: 10 // Prevent RPC bottlenecking during high traffic
+        take: 15,
+        orderBy: { createdAt: 'asc' }
       });
 
       if (pending.length === 0) return;
 
-      logger.debug(`[Observer] Processing ${pending.length} pending transaction(s)...`);
+      logger.info(`[PaymentObserver][${traceId}] Verifying ${pending.length} on-chain transactions...`);
 
       for (const p of pending) {
-        try {
-          if (!p.txHash) continue;
+        if (!p.txHash) continue;
 
-          // 2. HEAVY VERIFICATION
-          // Checks RPC for block depth, recipient, and amount matches
+        // 3. PER-PAYMENT LOCK: Prevent collision with manual "Verify" button clicks
+        const pLockId = `verify_pay:${p.id}`;
+        const pOwnerId = await mutex.acquire(pLockId, 60000);
+        if (!pOwnerId) continue;
+
+        try {
+          // 4. HEAVY VERIFICATION (Calls RPCs for Block Depth & Recipient)
           await paymentService.verifyTransaction(p.id, p.txHash);
           
-          logger.info(`[Observer] Payment SUCCESS: ${p.id} | Wallet: ${p.wallet} | TX: ${p.txHash}`);
-          
-          // The verifyTransaction service should update 'confirmed: true' in DB.
-          // This record will naturally drop out of the next interval's query.
+          logger.info(`[PaymentObserver][SUCCESS] ID: ${p.id} | TX: ${p.txHash} | Chain: ${p.chain}`);
 
         } catch (err: any) {
-          // 3. INTELLIGENT ERROR HANDLING
-          if (err.message.toLowerCase().includes('pending') || err.message.toLowerCase().includes('not found')) {
-            // Log as debug to keep production logs clean from "normal" pending status
-            logger.debug(`[Observer] TX ${p.txHash} still pending/unconfirmed on ${p.chain}.`);
-          } else {
-            logger.warn(`[Observer] Verification issue for ${p.id}: ${err.message}`);
-          }
-
-          // 4. FUTURE PROOF: Update attempts if field exists
-          // This prevents "Zombie" transactions from wasting RPC calls indefinitely
-          try {
-             await (prisma.payment as any).update({
-               where: { id: p.id },
-               data: { updatedAt: new Date() } // Track last check time
-             });
-          } catch (updateErr) {
-             // Silence if attempts field isn't in schema yet
-          }
+          const msg = err.message.toLowerCase();
           
-          continue; 
+          // 5. SMART ERROR HANDLING
+          if (msg.includes('pending') || msg.includes('not found') || msg.includes('depth')) {
+            // Normal blockchain delay - update status to PROCESSING
+            await prisma.payment.update({
+              where: { id: p.id },
+              data: { status: 'PROCESSING' }
+            }).catch(() => {});
+          } else {
+            logger.warn(`[PaymentObserver][REJECTED] ${p.id}: ${err.message}`);
+          }
+        } finally {
+          await mutex.release(pLockId, pOwnerId);
+          // Small jitter to prevent hitting RPC rate limits
+          await helpers.sleep(200); 
         }
       }
+
+      // 6. AUTO-CLEANUP: Mark very old pending payments as EXPIRED
+      const expiryThreshold = new Date(Date.now() - 4 * 60 * 60 * 1000);
+      await prisma.payment.updateMany({
+        where: { 
+          confirmed: false, 
+          status: 'PENDING',
+          createdAt: { lt: expiryThreshold } 
+        },
+        data: { status: 'EXPIRED' }
+      });
+
     } catch (err: any) {
-      logger.error(`[Observer] Global Monitor Critical Error: ${err.message}`);
+      logger.error(`[PaymentObserver][${traceId}] Global failure: ${err.message}`);
+    } finally {
+      await mutex.release(globalLockId, ownerId);
     }
-  }, 15000); 
+  }, HEARTBEAT_MS);
 }

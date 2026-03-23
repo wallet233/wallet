@@ -1,8 +1,9 @@
-import { getAddress, parseUnits, formatUnits, Interface } from 'ethers';
+import { getAddress, parseUnits, formatUnits, isAddress } from 'ethers';
 import { getProvider } from '../../blockchain/provider.js';
 import { EVM_CHAINS } from '../../blockchain/chains.js';
 import { logger } from '../../utils/logger.js';
 import { txBuilder } from '../../blockchain/txBuilder.js';
+import { helpers } from '../../utils/helpers.js';
 
 export interface BurnReport {
   chain: string;
@@ -11,67 +12,97 @@ export interface BurnReport {
   estimatedGasNative: string;
   burnAddress: string;
   tokens: string[];
-  payloads: any[]; // New: Ready-to-sign transaction payloads
+  payloads: any[]; 
+  chainId: number;
 }
 
 /**
- * Premium Batch Burn Engine - MEV-Shield Integrated
- * Orchestrates mass-deletion of spam via Private Flashbots Bundles.
+ * UPGRADED: Production-Grade Batch Burn Engine.
+ * Features: MEV-Shielding, Trap-Token Gas Protection, and Atomic Nonce Sequencing.
  */
 export async function batchBurnTokens(walletAddress: string, tokens: any[]): Promise<BurnReport[]> {
+  if (!isAddress(walletAddress)) throw new Error("INVALID_BURN_WALLET");
+  
   const safeAddr = getAddress(walletAddress);
   const BURN_ADDRESS = '0x000000000000000000000000000000000000dEaD';
+  const traceId = `BURN-ENGINE-${Date.now()}`;
 
-  // 1. Group spam tokens by chain for batching
-  const chainGroups = tokens.reduce((acc: any, token: any) => {
-    const chainName = token.chain || 'ethereum';
-    if (!acc[chainName]) acc[chainName] = [];
-    acc[chainName].push(token);
+  // 1. Group tokens by chain for batching (Ensures single-chain bundles)
+  const chainGroups = tokens.reduce((acc: Record<string, any[]>, token: any) => {
+    const chainIdOrName = String(token.chain || 'ethereum').toLowerCase();
+    if (!acc[chainIdOrName]) acc[chainIdOrName] = [];
+    acc[chainIdOrName].push(token);
     return acc;
   }, {});
 
-  const burnTasks = Object.keys(chainGroups).map(async (chainName): Promise<BurnReport | null> => {
-    const group = chainGroups[chainName];
-    const chain = EVM_CHAINS.find(c => c.name === chainName || c.id === Number(chainName));
+  const burnTasks = Object.keys(chainGroups).map(async (chainKey): Promise<BurnReport | null> => {
+    const group = chainGroups[chainKey];
+    const chain = EVM_CHAINS.find(c => 
+      c.name.toLowerCase() === chainKey || 
+      c.id === Number(chainKey)
+    );
     
-    if (!chain) return null;
+    if (!chain) {
+      logger.warn(`[BurnEngine][${traceId}] Unsupported chain: ${chainKey}`);
+      return null;
+    }
 
     try {
+      // 2. STATE SYNC: Get live nonce and gas data for real-money accuracy
       const provider = getProvider(chain.rpc);
-      const feeData = await provider.getFeeData();
+      const [feeData, baseNonce] = await Promise.all([
+        provider.getFeeData(),
+        provider.getTransactionCount(safeAddr)
+      ]);
       
-      // 2. INTELLIGENCE: Build payloads for every token in the group
-      // Using our Tier 1 txBuilder to ensure Hex-encoding and metadata
-      const payloads = await Promise.all(group.map(async (token: any) => {
-        return await txBuilder.buildBurnTx(
-          token.address || token.contractAddress,
+      const currentGasPrice = feeData.maxFeePerGas || feeData.gasPrice || parseUnits('30', 'gwei');
+
+      // 3. PAYLOAD CONSTRUCTION: Building EIP-1559 Transactions
+      const payloads = await Promise.all(group.map(async (token: any, index: number) => {
+        const contract = token.address || token.contract || token.contractAddress;
+        
+        // Build the raw data via txBuilder
+        const data = await txBuilder.buildBurnTx(
+          contract,
           token.balance,
           token.decimals || 18
         );
+
+        return {
+          to: contract,
+          data,
+          value: 0n,
+          nonce: baseNonce + index,
+          gasLimit: 120000n, // Base burn limit
+          chainId: chain.id,
+          maxFeePerGas: currentGasPrice,
+          maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || parseUnits('2', 'gwei')
+        };
       }));
 
-      // 3. HEAVY GAS ESTIMATION (Hardened for Spam Contracts)
-      // We use 120k for Burn + 30% Buffer for potential "Trap" logic in scam tokens
-      const currentGasPrice = feeData.gasPrice || parseUnits('25', 'gwei');
-      const totalGasLimit = BigInt(group.length) * 150000n; 
+      // 4. TRAP PROTECTION: Spam tokens often have "gas traps" to drain wallets.
+      // We apply a 50% safety buffer over the standard gas estimation.
+      const totalGasLimit = BigInt(payloads.length) * 180000n; 
       const estimatedCostWei = currentGasPrice * totalGasLimit;
 
-      logger.info(`[BurnEngine] Built ${group.length} private burn payloads for ${chainName} (${safeAddr})`);
+      logger.info(`[BurnEngine][${traceId}] Prepared ${payloads.length} private burns for ${chain.name}`);
 
       return {
-        chain: chainName,
+        chain: chain.name,
+        chainId: chain.id,
         tokenCount: group.length,
-        status: 'PROTECTED', // Marked for Private Flashbots Execution
+        status: chain.relayUrl ? 'PROTECTED' : 'READY', // Use Flashbots if available
         estimatedGasNative: formatUnits(estimatedCostWei, 18),
         burnAddress: BURN_ADDRESS,
-        tokens: group.map((t: any) => t.symbol),
+        tokens: group.map((t: any) => t.symbol || 'UNK'),
         payloads: payloads
       };
 
     } catch (err: any) {
-      logger.error(`[BurnEngine] Failed to prepare burn for ${chainName}: ${err.message}`);
+      logger.error(`[BurnEngine][${traceId}] Preparation failed for ${chainKey}: ${err.message}`);
       return {
-        chain: chainName,
+        chain: chainKey,
+        chainId: 0,
         tokenCount: group.length,
         status: 'FAILED',
         estimatedGasNative: '0',
@@ -84,8 +115,8 @@ export async function batchBurnTokens(walletAddress: string, tokens: any[]): Pro
 
   const results = await Promise.all(burnTasks);
   
-  // 4. VERTICAL ALIGNMENT: Sort results so Ethereum/L2s (Flashbots-supported) come first
+  // 5. PRIORITIZATION: Sort results so Flashbots-capable chains (Ethereum/L2s) are processed first
   return results
     .filter((r): r is BurnReport => r !== null)
-    .sort((a, b) => (a.chain === 'ethereum' ? -1 : 1));
+    .sort((a, b) => (a.status === 'PROTECTED' ? -1 : 1));
 }
