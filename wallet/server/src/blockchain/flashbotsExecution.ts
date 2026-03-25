@@ -2,7 +2,7 @@ import { ethers as ethersLegacy } from 'ethers-v6-legacy';
 import { FlashbotsBundleProvider, FlashbotsBundleResolution } from '@flashbots/ethers-provider-bundle';
 import { logger } from '../utils/logger.js';
 import { decryptPrivateKey, clearSensitiveData } from '../utils/crypto.js';
-import { getChain } from './chains.js';
+import { requireChain } from './chains.js';
 
 export interface BundleResult {
   success: boolean;
@@ -30,7 +30,7 @@ export const flashbotsExecution = {
     try {
       if (!rawKey) throw new Error('KEY_DECRYPTION_FAILED');
 
-      const chainConfig = getChain(chainId);
+      const chainConfig = requireChain(chainId);
       const provider = new ethersLegacy.JsonRpcProvider(rpcUrl);
       const userWallet = new ethersLegacy.Wallet(rawKey, provider);
       

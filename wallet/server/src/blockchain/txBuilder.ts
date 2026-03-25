@@ -2,22 +2,21 @@ import { ethers, getAddress } from 'ethers';
 import { logger } from '../utils/logger.js';
 
 /**
- * UPGRADED: Production-Grade Transaction Architect.
- * Features: BigInt-safe precision, Hex-normalization, and Atomic Bundle Sequencing.
- * Ensures "Real Money" movements are encoded with zero rounding errors.
+ * UPGRADED: Finance-Grade Transaction Architect.
+ * Features: Fixed-point precision math, Strict Hex-normalization, 
+ * and Nonce-aware Atomic Bundle Sequencing.
  */
 export const txBuilder = {
-  // Standard Dead Address for burning assets
   BURN_ADDRESS: '0x000000000000000000000000000000000000dEaD',
+  BASE_PRECISION: BigInt(1e18),
 
   /**
-   * Encodes a standard ERC20 'Burn' (Transfer to Dead Address).
+   * Encodes a standard ERC20 'Burn'.
    */
   async buildBurnTx(tokenAddress: string, amount: string, decimals: number = 18) {
     const iface = new ethers.Interface(["function transfer(address to, uint256 value)"]);
     
     try {
-      // Use BigInt for internal math to maintain perfect precision
       const rawValue = ethers.parseUnits(amount, decimals);
       const data = iface.encodeFunctionData("transfer", [this.BURN_ADDRESS, rawValue]);
 
@@ -25,8 +24,13 @@ export const txBuilder = {
         to: getAddress(tokenAddress),
         data,
         value: "0x0",
-        gasLimit: ethers.toQuantity(150000n), // Bumper for "Trap" tokens
-        metadata: { type: 'BURN', symbol: 'SPAM', rawValue: rawValue.toString() },
+        gasLimit: ethers.toQuantity(160000n), // Slightly increased for complex proxy tokens
+        metadata: { 
+          type: 'BURN', 
+          symbol: 'ASSET', 
+          rawValue: rawValue.toString(),
+          method: 'transfer(address,uint256)'
+        },
         canBundle: true
       };
     } catch (err: any) {
@@ -36,7 +40,7 @@ export const txBuilder = {
   },
 
   /**
-   * Encodes an Approval (Infinite by default for automation efficiency).
+   * Encodes an Approval.
    */
   async buildApprovalTx(tokenAddress: string, spender: string, amount: string, decimals: number = 18) {
     const iface = new ethers.Interface(["function approve(address spender, uint256 value)"]);
@@ -49,8 +53,13 @@ export const txBuilder = {
         to: getAddress(tokenAddress),
         data,
         value: "0x0",
-        gasLimit: ethers.toQuantity(85000n), 
-        metadata: { type: 'APPROVAL', spender: getAddress(spender), rawValue: rawValue.toString() },
+        gasLimit: ethers.toQuantity(95000n), 
+        metadata: { 
+          type: 'APPROVAL', 
+          spender: getAddress(spender), 
+          rawValue: rawValue.toString(),
+          method: 'approve(address,uint256)'
+        },
         canBundle: true
       };
     } catch (err: any) {
@@ -61,7 +70,6 @@ export const txBuilder = {
 
   /**
    * Encodes a Revoke (Sets approval to 0).
-   * Vital for protecting high-value wallets from compromised spenders.
    */
   async buildRevokeTx(tokenAddress: string, spender: string) {
     const iface = new ethers.Interface(["function approve(address spender, uint256 value)"]);
@@ -73,8 +81,12 @@ export const txBuilder = {
         to: getAddress(tokenAddress),
         data,
         value: "0x0",
-        gasLimit: ethers.toQuantity(70000n),
-        metadata: { type: 'REVOKE', targetSpender: getAddress(spender) },
+        gasLimit: ethers.toQuantity(80000n),
+        metadata: { 
+          type: 'REVOKE', 
+          targetSpender: getAddress(spender),
+          isPriority: true 
+        },
         isSecurityAction: true
       };
     } catch (err: any) {
@@ -85,7 +97,6 @@ export const txBuilder = {
 
   /**
    * Builds a Native Asset Transfer (ETH/POL/BNB).
-   * Uses Hex-encoding for the 'value' field as required by Ethers v6.
    */
   async buildNativeTransfer(to: string, amount: string) {
     try {
@@ -95,7 +106,11 @@ export const txBuilder = {
         value: ethers.toQuantity(weiValue),
         data: "0x",
         gasLimit: ethers.toQuantity(21000n),
-        metadata: { type: 'NATIVE_TRANSFER', rawValue: weiValue.toString() }
+        metadata: { 
+          type: 'NATIVE_TRANSFER', 
+          rawValue: weiValue.toString(),
+          isEther: true 
+        }
       };
     } catch (err: any) {
       logger.error(`[TxBuilder] Failed to encode native transfer: ${err.message}`);
@@ -105,13 +120,15 @@ export const txBuilder = {
 
   /**
    * Dynamic Fee Deduction Builder.
-   * Ensures the platform's cut is calculated with BigInt precision to avoid "Dust" remainders.
+   * UPGRADED: Fixed-point math to prevent precision loss.
    */
-  async buildFeeTx(recipient: string, amountUsd: number, tokenPrice: number, tokenAddress: string) {
+  async buildFeeTx(recipient: string, amountUsd: number, tokenPrice: number, tokenAddress: string, decimals: number = 18) {
     try {
-      // 1. Calculate token amount (e.g., $10 / $2500 ETH = 0.004)
-      const feeTokenAmount = (amountUsd / tokenPrice).toFixed(18);
-      const rawValue = ethers.parseUnits(feeTokenAmount, 18);
+      // Logic: (USD_AMT * 10^18) / PRICE_USD = TOKEN_AMT (in wei-precision)
+      const usdInBigInt = BigInt(Math.floor(amountUsd * 1e6)); 
+      const priceInBigInt = BigInt(Math.floor(tokenPrice * 1e6));
+      
+      const rawValue = (usdInBigInt * ethers.parseUnits('1', decimals)) / priceInBigInt;
       
       const iface = new ethers.Interface(["function transfer(address to, uint256 value)"]);
       const data = iface.encodeFunctionData("transfer", [getAddress(recipient), rawValue]);
@@ -120,8 +137,13 @@ export const txBuilder = {
         to: getAddress(tokenAddress),
         data,
         value: "0x0",
-        gasLimit: ethers.toQuantity(75000n),
-        metadata: { type: 'PROTOCOL_FEE', usdValue: amountUsd, rawValue: rawValue.toString() }
+        gasLimit: ethers.toQuantity(85000n),
+        metadata: { 
+          type: 'PROTOCOL_FEE', 
+          usdValue: amountUsd, 
+          rawValue: rawValue.toString(),
+          tokenPrice
+        }
       };
     } catch (err: any) {
       logger.error(`[TxBuilder] Failed to build fee tx: ${err.message}`);
@@ -131,13 +153,15 @@ export const txBuilder = {
 
   /**
    * ATOMIC SEQUENCE: Formats multiple TXs into a Flashbots-ready bundle.
-   * Priority: 1. Revokes (Safety) -> 2. Approvals (Setup) -> 3. Burns/Swaps (Action) -> 4. Fees (Cleanup).
+   * Logic: Sorts by priority, normalizes hex values, and injects nonce offsets.
    */
-  formatBundle(transactions: any[]) {
+  formatBundle(transactions: any[], startNonce: number = 0) {
     const priorityMap: Record<string, number> = { 
       'REVOKE': 1, 
+      'SECURITY_ALERT': 1,
       'APPROVAL': 2, 
       'BURN': 3, 
+      'RECOVERY': 3,
       'NATIVE_TRANSFER': 4,
       'PROTOCOL_FEE': 5 
     };
@@ -148,13 +172,24 @@ export const txBuilder = {
       return (priorityMap[typeA] || 99) - (priorityMap[typeB] || 99);
     });
 
-    // Map to a consistent format for the Flashbots Execution engine
-    return sorted.map((tx, index) => ({
-      ...tx,
-      nonceOffset: index,
-      // Ensure BigInt values are converted to strings/hex for the JSON-RPC layer
-      value: tx.value ? BigInt(tx.value) : 0n,
-      gasLimit: tx.gasLimit ? BigInt(tx.gasLimit) : 150000n
-    }));
+    return sorted.map((tx, index) => {
+      // Ensure gasLimit and value are Ethers-v6 compliant hex strings
+      const normalizedValue = typeof tx.value === 'string' && tx.value.startsWith('0x') 
+        ? tx.value 
+        : ethers.toQuantity(BigInt(tx.value || 0));
+
+      const normalizedGas = typeof tx.gasLimit === 'string' && tx.gasLimit.startsWith('0x')
+        ? tx.gasLimit
+        : ethers.toQuantity(BigInt(tx.gasLimit || 150000));
+
+      return {
+        ...tx,
+        to: getAddress(tx.to),
+        value: normalizedValue,
+        gasLimit: normalizedGas,
+        nonce: startNonce + index, // Essential for serial execution
+        chainId: tx.chainId ? BigInt(tx.chainId) : undefined
+      };
+    });
   }
 };

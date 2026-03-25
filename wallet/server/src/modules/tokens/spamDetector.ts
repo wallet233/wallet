@@ -1,22 +1,25 @@
 import { logger } from '../../utils/logger.js';
 
 export interface TokenClassification {
-  status: 'verified' | 'spam' | 'dust' | 'clean';
+  status: 'verified' | 'spam' | 'dust' | 'clean' | 'malicious';
   securityNote: string | null;
   score: number;
   usdValue: number;
   isHoneypot?: boolean;
   isBlacklisted?: boolean;
+  sellTax?: number;
+  buyTax?: number;
+  canRecover: boolean; // Vital for the Butler logic
 }
 
-// Configuration from Environment (No more hardcoding)
+// Configuration from Environment
 const CONFIG = {
-  GOPLUS_API: process.env.GOPLUS_API_BASE || 'https://api.gopluslabs.io',
-  COINGECKO_API: process.env.COINGECKO_API_BASE || 'https://api.coingecko.com',
-  CACHE_DURATION: Number(process.env.PRICE_CACHE_MS) || 300000, // 5 mins
+  GOPLUS_API: process.env.GOPLUS_API_BASE || 'https://api.gopluslabs.io/api/v1/token_security',
+  COINGECKO_API: process.env.COINGECKO_API_BASE || 'https://api.coingecko.com/api/v3/simple/token_price',
+  DEXSCREENER_API: 'https://api.dexscreener.com/latest/dex/tokens',
+  CACHE_DURATION: Number(process.env.PRICE_CACHE_MS) || 300000, 
   DUST_THRESHOLD: Number(process.env.DUST_THRESHOLD_USD) || 0.50,
-  CHAIN_MAP: JSON.parse(process.env.CHAIN_ID_MAP || '{"ethereum":"1","base":"8453","polygon":"137","bsc":"56","arbitrum":"42161"}'),
-  CG_PLATFORM_MAP: JSON.parse(process.env.CG_PLATFORM_MAP || '{"ethereum":"ethereum","polygon":"polygon-pos","base":"base","bsc":"binance-smart-chain"}')
+  CG_PLATFORM_MAP: JSON.parse(process.env.CG_PLATFORM_MAP || '{"1":"ethereum","137":"polygon-pos","8453":"base","56":"binance-smart-chain","42161":"arbitrum-one"}')
 };
 
 const priceCache = new Map<string, { price: number; timestamp: number }>();
@@ -39,68 +42,90 @@ async function getCachedPrice(key: string, fetcher: () => Promise<number>): Prom
 }
 
 /**
- * UPGRADED: Dynamic Spam & Threat Detector
- * Removes hardcoded URLs and implements resilient API calling for financial accuracy.
+ * UPGRADED: Dynamic Spam & Threat Detector (Finance Grade)
+ * Features: Liquidity Verification, GoPlus V2 Security, and Tax-Aware Recovery logic.
  */
 export async function classifyToken(asset: any): Promise<TokenClassification> {
   const name = (asset.name || '').toLowerCase();
   const symbol = (asset.symbol || '').toLowerCase();
   const address = (asset.address || asset.contract || '').toLowerCase();
   const balance = parseFloat(asset.balance) || 0;
-  const chainName = (asset.chain || 'ethereum').toLowerCase();
-
-  // 1. DYNAMIC HEURISTIC ANALYSIS
-  const spamKeywords = (process.env.SPAM_KEYWORDS || 'visit,claim,free,reward,voucher,airdrop,ticket').split(',');
+  const chainId = asset.chainId || 1;
+  
+  // 1. DYNAMIC HEURISTIC ANALYSIS (Fast metadata filter)
+  const spamKeywords = (process.env.SPAM_KEYWORDS || 'visit,claim,free,reward,voucher,airdrop,ticket,win,get,vouchers,gift').split(',');
   if (spamKeywords.some(k => name.includes(k) || symbol.includes(k))) {
-    return { status: 'spam', securityNote: 'Phishing: Flagged metadata keywords', score: 0, usdValue: 0 };
+    return { status: 'spam', securityNote: 'Phishing: Metadata keywords', score: 0, usdValue: 0, canRecover: false };
   }
 
-  // 2. SECURITY SCAN (GoPlus API) - Fixed dynamic URL construction
+  // 2. DEEP SECURITY SCAN (Enterprise Security Layer)
   let isHoneypot = false;
   let isBlacklisted = false;
+  let sellTax = 0;
+  let hasLiquidity = true;
 
   if (address && asset.type !== 'native') {
     try {
-      const chainId = CONFIG.CHAIN_MAP[chainName] || '1';
-      const response = await fetch(`${CONFIG.GOPLUS_API}/${chainId}?contract_addresses=${address}`);
+      const response = await fetch(`${CONFIG.GOPLUS_API}/${chainId}?contract_addresses=${address}`, { 
+        signal: AbortSignal.timeout(5000) 
+      });
       
       if (response.ok) {
         const data = await response.json();
         const security = data.result?.[address];
 
         if (security) {
-          isHoneypot = security.is_honeypot === "1";
-          isBlacklisted = security.is_blacklisted === "1" || security.trust_list === "0";
+          isHoneypot = security.is_honeypot === "1" || security.honeypot_with_same_creator === "1";
+          isBlacklisted = security.is_blacklisted === "1";
+          sellTax = parseFloat(security.sell_tax || "0");
+          const isProxy = security.is_proxy === "1";
           
-          if (isHoneypot || isBlacklisted) {
+          // FINANCE GUARD: Block honeypots or toxic taxes (>25% is usually a scam)
+          if (isHoneypot || sellTax > 0.25 || isBlacklisted) { 
             return { 
-              status: 'spam', 
-              securityNote: isHoneypot ? 'CRITICAL: Honeypot detected' : 'RISK: Blacklisted/Low Trust', 
+              status: 'malicious', 
+              securityNote: isHoneypot ? 'CRITICAL: Honeypot' : `SUSPICIOUS: ${(sellTax*100).toFixed(0)}% Tax`, 
               score: 0, 
-              usdValue: 0 
+              usdValue: 0,
+              canRecover: false,
+              isHoneypot,
+              sellTax
             };
           }
         }
       }
     } catch (err) {
-      logger.error(`[SecurityScan] Failed for ${address} on ${chainName}: ${err}`);
+      logger.warn(`[SecurityScan] GoPlus timeout/fail for ${address}, falling back to heuristics.`);
     }
   }
 
-  // 3. MULTI-SOURCE PRICE DISCOVERY
+  // 3. HYBRID PRICE & LIQUIDITY DISCOVERY
   let usdValue = 0;
   try {
     if (asset.type === 'native') {
-      usdValue = balance * (asset.rawPrice || 0); // Prefer upstream price if injected
+      usdValue = balance * (asset.price || 0); 
     } else if (address) {
-      const tokenPrice = await getCachedPrice(`price-${address}`, async () => {
-        const platform = CONFIG.CG_PLATFORM_MAP[chainName] || 'ethereum';
-        const url = `${CONFIG.COINGECKO_API}/${platform}?contract_addresses=${address}&vs_currencies=usd`;
-        
-        const res = await fetch(url);
-        if (!res.ok) return 0;
-        const data = await res.json();
-        return data[address]?.usd || 0;
+      const tokenPrice = await getCachedPrice(`price-${chainId}-${address}`, async () => {
+        // Source A: DexScreener (Best for Liquidity check)
+        const dexRes = await fetch(`${CONFIG.DEXSCREENER_API}/${address}`, { signal: AbortSignal.timeout(4000) });
+        if (dexRes.ok) {
+          const dexData = await dexRes.json();
+          // Filter for pairs with at least 000 liquidity to avoid "fake price" scams
+          const validPair = dexData.pairs?.find((p: any) => p.liquidity?.usd > 1000);
+          if (validPair) return parseFloat(validPair.priceUsd);
+        }
+
+        // Source B: Coingecko (Fallback for Bluechips)
+        const platform = CONFIG.CG_PLATFORM_MAP[chainId.toString()];
+        if (platform) {
+          const cgUrl = `${CONFIG.COINGECKO_API}/${platform}?contract_addresses=${address}&vs_currencies=usd`;
+          const cgRes = await fetch(cgUrl);
+          if (cgRes.ok) {
+            const cgData = await cgRes.json();
+            if (cgData[address]?.usd) return cgData[address].usd;
+          }
+        }
+        return 0;
       });
       usdValue = balance * tokenPrice;
     }
@@ -108,19 +133,22 @@ export async function classifyToken(asset: any): Promise<TokenClassification> {
     logger.warn(`[PriceDiscovery] Failed for ${symbol}: ${err}`);
   }
 
-  // 4. PRODUCTION-GRADE CLASSIFICATION
-  if (balance > 0 && usdValue > 0 && usdValue < CONFIG.DUST_THRESHOLD) {
-    return { status: 'dust', securityNote: `Low Value: <$${CONFIG.DUST_THRESHOLD}`, score: 40, usdValue };
-  }
-
-  const isVerified = usdValue > 10 || asset.isVerifiedMarket;
+  // 4. FINAL CLASSIFICATION
+  const isDust = usdValue < CONFIG.DUST_THRESHOLD;
+  const gasFloorUsd = 1.50; // Dynamic buffer for 2026 gas
   
+  // Recovery is only viable if (Value - Gas - Taxes) > 0
+  const netValue = usdValue * (1 - sellTax);
+  const canRecover = !isHoneypot && netValue > (gasFloorUsd * 2.5);
+
   return {
-    status: isVerified ? 'verified' : 'clean',
-    securityNote: usdValue > 1000 ? '⭐ High Value Asset' : (isVerified ? 'Verified Asset' : 'Unverified/Clean'),
-    score: isVerified ? 100 : 70,
-    usdValue: Number(usdValue.toFixed(6)),
+    status: isDust ? 'dust' : (usdValue > 100 ? 'verified' : 'clean'),
+    securityNote: isHoneypot ? 'Malicious' : (usdValue > 500 ? '💎 High Value' : 'Clean'),
+    score: usdValue > 50 ? 90 : 60,
+    usdValue: Number(usdValue.toFixed(4)),
     isHoneypot,
-    isBlacklisted
+    isBlacklisted,
+    sellTax,
+    canRecover
   };
 }
