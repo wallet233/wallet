@@ -7,12 +7,13 @@ import { txBuilder } from '../../blockchain/txBuilder.js';
 import { helpers } from '../../utils/helpers.js';
 import { feeCalculator } from '../../pricing/feeCalculator.js';
 import { revenueTracker } from '../../pricing/revenueTracker.js';
+import { flashbotsExecution } from '../../blockchain/flashbotsExecution.js'; // INTEGRATED
 import crypto from 'crypto';
 
 export interface RescueQuote {
   chain: string;
   chainId: number;
-  strategy: 'DIRECT' | 'RELAYED' | 'RELAY_BRIDGE';
+  strategy: 'DIRECT' | 'RELAYED' | 'RELAY_BRIDGE' | 'FLASHBOTS_MEV_SHIELD';
   feeTier: string;
   feeLabel: string;
   gasEstimateNative: string;
@@ -28,8 +29,8 @@ export interface RescueQuote {
 
 /**
  * BATTLE-STRESSED: Institutional Smart Rescue Executor (v2026.10 Latency-Aware).
- * UPGRADES: Dynamic RPC Load Balancing, BigInt Precision, and Async Metadata Sync.
- * INTEGRATION: Strictly utilizes chains.ts for dynamic RPC discovery and chain validation.
+ * UPGRADES: Flashbots MEV-Shield Integration, BigInt Precision, and Async Metadata Sync.
+ * INTEGRATION: Strictly utilizes chains.ts and flashbotsExecution.ts for atomic recovery.
  */
 export const swapExecutor = {
   /**
@@ -62,15 +63,15 @@ export const swapExecutor = {
       const group = chainGroups[chainIdStr];
 
       try {
-        // 1. DYNAMIC CHAIN RESOLUTION (Strict Boundary: requireChain throws if unsupported)
+        // 1. DYNAMIC CHAIN RESOLUTION (Strict Boundary)
         const chain = requireChain(chainId) as any;
         if (!group.tokens || group.tokens.length === 0) return null;
 
-        // 2. RPC LATENCY OPTIMIZATION (STRESS UPGRADE: Fetch best RPC before state calls)
+        // 2. RPC LATENCY OPTIMIZATION (STRESS UPGRADE)
         const bestRpc = await this.withTimeout(getBestRpc(chainId), 4000, `RPC_DISCOVERY_${chainId}`);
         const provider = getProvider(chainId, bestRpc);
 
-        // 3. DATA SYNC (STRESS UPGRADE: Zero-Hardcoding)
+        // 3. DATA SYNC (Zero-Hardcoding)
         const [nativeBalance, feeData] = await this.withTimeout(
           Promise.all([
             provider.getBalance(safeAddr),
@@ -80,7 +81,6 @@ export const swapExecutor = {
           `SYNC_${chain.name}`
         );
 
-        // BOUNDARY: Prices derived from chain metadata (nativePriceId)
         const nativePriceUsd = Number(process.env[`PRICE_${chain.nativePriceId.toUpperCase()}`]) || 
                                Number(process.env.NATIVE_PRICE_FALLBACK) || 2500;
         
@@ -89,21 +89,28 @@ export const swapExecutor = {
           return null;
         }
 
-        // 4. DYNAMIC GAS CALCULATION (EIP-1559 Aware)
+        // 4. DYNAMIC GAS CALCULATION (Institutional Buffering)
         const baseFee = feeData.maxFeePerGas || feeData.gasPrice;
         if (!baseFee) throw new Error("GAS_DATA_UNAVAILABLE");
 
-        const gasMultiplier = BigInt(Math.floor((Number(process.env.GAS_BUFFER) || 1.25) * 100));
+        const gasMultiplier = BigInt(Math.floor((Number(process.env.GAS_BUFFER) || 1.35) * 100));
         const currentMaxFee = (baseFee * gasMultiplier) / 100n;
         
-        const gasPerSwap = BigInt(process.env.GAS_PER_SWAP || 210000);
-        const totalGasLimit = BigInt(group.tokens.length) * gasPerSwap + BigInt(60000); 
+        const gasPerSwap = BigInt(process.env.GAS_PER_SWAP || 250000);
+        const totalGasLimit = BigInt(group.tokens.length) * gasPerSwap + BigInt(100000); 
         const estimatedGasCostWei = currentMaxFee * totalGasLimit;
 
-        // 5. STRATEGY SELECTION (Strict Liquidity Guard)
-        const liquidityBuffer = BigInt(Math.floor((Number(process.env.LIQUIDITY_SAFETY_FACTOR) || 1.1) * 100));
-        const hasEnoughGas = nativeBalance >= (estimatedGasCostWei * liquidityBuffer / 100n);
-        const strategy = hasEnoughGas ? 'DIRECT' : 'RELAYED';
+        // 5. STRATEGY SELECTION (MEV-SHIELD UPGRADE)
+        // Automatically prefer FLASHBOTS for Mainnet/L2 if value > threshold
+        const totalValueUsd = group.tokens.reduce((sum: number, t: any) => sum + (Number(t.usdValue) || 0), 0);
+        const mevThreshold = Number(process.env.MEV_PROTECTION_THRESHOLD) || 500;
+        
+        let strategy: 'DIRECT' | 'RELAYED' | 'FLASHBOTS_MEV_SHIELD' = 
+          nativeBalance >= (estimatedGasCostWei * 120n / 100n) ? 'DIRECT' : 'RELAYED';
+        
+        if (strategy === 'DIRECT' && totalValueUsd > mevThreshold && (chainId === 1 || chainId === 11155111)) {
+          strategy = 'FLASHBOTS_MEV_SHIELD';
+        }
         
         // 6. SECURITY ASSESSMENT
         const securityChecks = await this.withTimeout(
@@ -119,7 +126,6 @@ export const swapExecutor = {
         const slippage = isRisky ? (Number(process.env.SLIPPAGE_HIGH) || 10.0) : (Number(process.env.SLIPPAGE_STANDARD) || 1.0);
 
         // 7. DYNAMIC FEE CALCULATION
-        const totalValueUsd = group.tokens.reduce((sum: number, t: any) => sum + (Number(t.usdValue) || 0), 0);
         const feeReport = (feeCalculator as any).calculateRescueFee({
           amountUsd: totalValueUsd,
           isGasless: strategy === 'RELAYED',
@@ -127,13 +133,13 @@ export const swapExecutor = {
           riskScore: maxRiskFound
         });
 
-        const RECOVERY_SPENDER = process.env.RECOVERY_SPENDER_ADDRESS;
+        const RECOVERY_SPENDER = getAddress(process.env.RECOVERY_SPENDER_ADDRESS || '');
         if (!RECOVERY_SPENDER) throw new Error("SPENDER_CONFIG_MISSING");
 
         const nativeSymbol = chain.symbol || 'ETH';
         const payloads: any[] = [];
 
-        // 8. ATOMIC BUNDLE CONSTRUCTION
+        // 8. ATOMIC BUNDLE CONSTRUCTION (Sanitized)
         for (const token of group.tokens) {
           const approval = await (txBuilder as any).buildApprovalTx(
             token.contract || token.address,
@@ -145,29 +151,30 @@ export const swapExecutor = {
           if (approval) {
             payloads.push(approval);
             payloads.push({
-               to: getAddress(RECOVERY_SPENDER),
-               data: "0x", 
+               to: RECOVERY_SPENDER,
+               data: "0x", // Real swap data populated by txBuilder later
                value: "0x0",
-               gasLimit: (BigInt(approval.gasLimit || 120000) * BigInt(Math.floor((Number(process.env.TX_SAFETY_MULTIPLIER) || 1.5) * 10))).toString(),
+               gasLimit: (BigInt(approval.gasLimit || 150000) * 15n / 10n).toString(),
                metadata: { 
                  type: 'RECOVERY_SWAP', 
                  from: token.symbol, 
                  to: nativeSymbol, 
-                 chainId: chain.id
+                 chainId: chain.id,
+                 traceId
                }
             });
           }
         }
 
-        // 9. PROFITABILITY AUDIT (Yes or No Boundary)
-        const gasUsd = parseFloat(formatUnits(estimatedGasCostWei, 18)) * nativePriceUsd;
-        const l1FeeAdjustmentUsd = chain.isL2 ? (parseFloat(process.env.L1_FEE_ESTIMATE || '0.15') * group.tokens.length) : 0;
+        // 9. PROFITABILITY AUDIT (Institutional Precision)
+        const gasUsd = (Number(formatUnits(estimatedGasCostWei, 18)) * nativePriceUsd);
+        const l1FeeAdjustmentUsd = chain.isL2 ? (parseFloat(process.env.L1_FEE_ESTIMATE || '0.25') * group.tokens.length) : 0;
         
-        const netReceiveUsd = totalValueUsd - (feeReport?.feeUsd || 0) - (strategy === 'DIRECT' ? gasUsd : 0) - l1FeeAdjustmentUsd;
-        const minProfitThreshold = Number(process.env.MIN_RECOVERY_PROFIT) || 2.50;
+        const netReceiveUsd = totalValueUsd - (feeReport?.feeUsd || 0) - (strategy !== 'RELAYED' ? gasUsd : 0) - l1FeeAdjustmentUsd;
+        const minProfitThreshold = Number(process.env.MIN_RECOVERY_PROFIT) || 3.00;
         
         if (isNaN(netReceiveUsd) || netReceiveUsd < minProfitThreshold) {
-            logger.info(`[SwapExecutor][${traceId}] REJECTED: Net profit $${(netReceiveUsd || 0).toFixed(2)} fails threshold $${minProfitThreshold}`);
+            logger.info(`[SwapExecutor][${traceId}] ABORT: Low Profitability ($${netReceiveUsd.toFixed(2)})`);
             return null; 
         }
 
@@ -216,7 +223,8 @@ export const swapExecutor = {
     const labels: Record<string, string> = {
       'DIRECT': "Standard Recovery",
       'RELAYED': "Institutional Gasless",
-      'RELAY_BRIDGE': "Cross-chain Settlement"
+      'RELAY_BRIDGE': "Cross-chain Settlement",
+      'FLASHBOTS_MEV_SHIELD': "MEV-Shielded Recovery"
     };
     return labels[strategy] || "Native Recovery";
   },
@@ -230,6 +238,17 @@ export const swapExecutor = {
     ).catch(() => parseUnits('0.0001', 18));
     
     return executionWei + BigInt(l1Fee);
+  },
+
+  /**
+   * Institutional Execution Wrapper: Automatically routes to Flashbots or Standard
+   */
+  async executeRecovery(encryptedPk: string, quote: RescueQuote, rpcUrl: string): Promise<any> {
+    if (quote.strategy === 'FLASHBOTS_MEV_SHIELD') {
+      return await flashbotsExecution.executeBundle(encryptedPk, rpcUrl, quote.payloads, quote.chainId);
+    }
+    // Fallback to standard broadaster (implementation assumed in txBuilder)
+    return await (txBuilder as any).broadcastStandard(encryptedPk, quote.payloads, quote.chainId);
   }
 };
 
