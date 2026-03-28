@@ -1,123 +1,103 @@
 import 'dotenv/config';
 import swapExecutor from './swapExecutor.js';
-import crypto from 'crypto';
 
-const TEST_WALLET = '0x000000000000000000000000000000000000dead';
+const TEST_WALLET = '0x000000000000000000000000000000000000dEaD';
 
-/**
- * Generate random fake assets to simulate real wallets
- */
-function generateAssets(batchSize: number) {
-  const chains = [1, 137, 8453, 42161]; // ETH, Polygon, Base, Arbitrum
+// Generate random token
+function generateToken(chainId: number) {
+  const symbols = ['USDT', 'USDC', 'DAI', 'WETH', 'UNI', 'LINK'];
+  
+  return {
+    chainId,
+    symbol: symbols[Math.floor(Math.random() * symbols.length)],
+    address: '0x000000000000000000000000000000000000dEaD',
+    contract: '0x000000000000000000000000000000000000dEaD',
+    decimals: 18,
+    balance: Math.floor(Math.random() * 1000),
+    rawBalance: BigInt(Math.floor(Math.random() * 1e18)),
+    usdValue: Math.random() * 2000 // up to $2k
+  };
+}
 
-  return Array.from({ length: batchSize }).map(() => {
+// Generate asset batch
+function generateAssets() {
+  const chains = [1, 137, 8453];
+  const assets: any[] = [];
+
+  const count = Math.floor(Math.random() * 5) + 1;
+
+  for (let i = 0; i < count; i++) {
     const chainId = chains[Math.floor(Math.random() * chains.length)];
-    const value = Math.random() * 1200; // simulate up to $1200 tokens
-
-    return {
-      asset: {
-        chainId,
-        symbol: 'TKN',
-        address: '0x' + crypto.randomBytes(20).toString('hex'),
-        contract: '0x' + crypto.randomBytes(20).toString('hex'),
-        decimals: 18,
-        balance: (Math.random() * 1000).toFixed(4),
-        rawBalance: BigInt(Math.floor(Math.random() * 1e18)).toString(),
-        usdValue: value
-      }
-    };
-  });
-}
-
-/**
- * Run one simulated wallet recovery
- */
-async function simulateWalletRun(id: number) {
-  const assetCount = Math.floor(Math.random() * 8) + 2;
-  const assets = generateAssets(assetCount);
-
-  const start = Date.now();
-
-  try {
-    const quotes = await swapExecutor.getSmartRescueQuote(
-      TEST_WALLET,
-      assets,
-      Math.random() > 0.7 ? 'PRO' : 'BASIC'
-    );
-
-    const duration = Date.now() - start;
-
-    return {
-      id,
-      success: true,
-      quotes: quotes.length,
-      duration
-    };
-  } catch (err: any) {
-    return {
-      id,
-      success: false,
-      error: err.message
-    };
+    assets.push(generateToken(chainId));
   }
+
+  return assets;
 }
 
-/**
- * MAIN STRESS TEST
- */
+// Main stress runner
 async function runStressTest() {
-  console.log('🚀 STARTING SWAP EXECUTOR STRESS TEST...\n');
+  console.log('🔥 STARTING SWAP EXECUTOR WAR TEST...\n');
 
-  const CONCURRENT_USERS = 25; // simulate 25 wallets at once
-  const ROUNDS = 4;            // repeat waves
+  const TOTAL_REQUESTS = 100;
+  const CONCURRENCY = 25;
 
-  let totalSuccess = 0;
-  let totalFail = 0;
+  let success = 0;
+  let failed = 0;
+  let aborted = 0;
 
-  const globalStart = Date.now();
+  const startTime = Date.now();
 
-  for (let round = 1; round <= ROUNDS; round++) {
-    console.log(`⚡ ROUND ${round}: Simulating ${CONCURRENT_USERS} concurrent wallets...`);
+  const batches = [];
 
-    const promises = Array.from({ length: CONCURRENT_USERS }).map((_, i) =>
-      simulateWalletRun(i)
-    );
+  for (let i = 0; i < TOTAL_REQUESTS; i += CONCURRENCY) {
+    const batch = [];
 
-    const results = await Promise.all(promises);
+    for (let j = 0; j < CONCURRENCY; j++) {
+      batch.push(
+        (async () => {
+          try {
+            const assets = generateAssets();
 
-    const success = results.filter(r => r.success).length;
-    const fail = results.length - success;
+            const result = await swapExecutor.getSmartRescueQuote(
+              TEST_WALLET,
+              assets,
+              Math.random() > 0.5 ? 'PRO' : 'BASIC'
+            );
 
-    totalSuccess += success;
-    totalFail += fail;
+            if (!result || result.length === 0) {
+              aborted++;
+              return;
+            }
 
-    const avgTime =
-      results
-        .filter(r => r.success)
-        .reduce((sum, r) => sum + (r.duration || 0), 0) /
-      Math.max(success, 1);
+            success++;
 
-    console.log(`   ✅ Success: ${success}`);
-    console.log(`   ❌ Failed: ${fail}`);
-    console.log(`   ⏱️ Avg Execution Time: ${avgTime.toFixed(2)}ms\n`);
+          } catch (err: any) {
+            failed++;
+          }
+        })()
+      );
+    }
+
+    batches.push(Promise.all(batch));
   }
 
-  const totalTime = Date.now() - globalStart;
+  await Promise.all(batches);
 
-  console.log('📊 FINAL RESULTS:');
-  console.log(`   🧠 Total Requests: ${CONCURRENT_USERS * ROUNDS}`);
-  console.log(`   ✅ Total Success: ${totalSuccess}`);
-  console.log(`   ❌ Total Failed: ${totalFail}`);
-  console.log(`   ⏱️ Total Runtime: ${totalTime}ms`);
+  const totalTime = Date.now() - startTime;
 
-  if (totalFail > 0) {
-    console.log('\n⚠️ Some failures detected — check logs for bottlenecks.');
-  } else {
-    console.log('\n🔥 SYSTEM PASSED: Ready for production-grade load.');
-  }
+  console.log('\n📊 FINAL RESULTS:\n');
+  console.log('Total Requests:', TOTAL_REQUESTS);
+  console.log('✅ Success:', success);
+  console.log('⚠️ Aborted (non-profitable / filtered):', aborted);
+  console.log('❌ Failed:', failed);
+  console.log('⏱ Total Time:', totalTime + 'ms');
+  console.log('⚡ Avg per Request:', (totalTime / TOTAL_REQUESTS).toFixed(2) + 'ms');
+
+  console.log('\n🚀 SYSTEM STATUS:',
+    failed === 0 ? 'STABLE ✅' : 'UNSTABLE ❌'
+  );
 }
 
 runStressTest().catch(err => {
-  console.error('💥 CRITICAL FAILURE:', err);
-  process.exit(1);
+  console.error('CRITICAL FAILURE:', err);
 });
