@@ -11,7 +11,7 @@ export interface BundleResult {
   txHash?: string;
   rejectionReason?: string;
   gasUsed?: bigint;
-  targetBlock?: number;
+  targetBlock?: number | number[];
 }
 
 /**
@@ -19,6 +19,7 @@ export interface BundleResult {
  * UPGRADES: Nonce-Collision Protection, Strict Memory Purgatory, and Multi-Relay Logic.
  * SECURITY: Implements Tier-1 Private Key handling with mandatory heap-cleaning.
  * FIX: Raw-Hex Bundle Signing to prevent 'Go unmarshal object into string' relay errors.
+ * OVERDRIVE: Multi-Block Saturation (+1, +2, +3) and Persistent Auth Reputation.
  */
 export const flashbotsExecution = {
   async executeBundle(
@@ -56,7 +57,10 @@ export const flashbotsExecution = {
          process.env.CUSTOM_RELAY_URL || 'https://relay.flashbots.net');
 
       // Use a randomized auth signer for every bundle to protect user reputation
-      const authSigner = ethersLegacy.Wallet.createRandom();
+      // UPGRADE: Use persistent environment key if available to build relay reputation
+      const authSigner = process.env.FLASHBOTS_AUTH_KEY 
+        ? new ethersLegacy.Wallet(process.env.FLASHBOTS_AUTH_KEY)
+        : ethersLegacy.Wallet.createRandom();
 
       // UPGRADE: Multi-Relay Aggregator (Broadcasting to Titan & Beaver for Mainnet)
       const relayEndpoints = [relayUrl];
@@ -121,15 +125,16 @@ export const flashbotsExecution = {
       // UPGRADE: Pre-sign the bundle to convert objects to the raw strings the Relay Go-backend expects
       const signedBundle = await flashbotsProvider.signBundle(bundleTransactions);
 
-      const targetBlock = blockNumber + 1;
+      // UPGRADE: Multi-Block Saturation (+1, +2, +3)
+      const targetBlocks = [blockNumber + 1, blockNumber + 2, blockNumber + 3];
      
       // 5. FORENSIC SIMULATION (Revert Guard)
       // Using signedBundle (Array of strings) instead of bundleTransactions (Array of objects)
-      const simulation = await flashbotsProvider.simulate(signedBundle, targetBlock);
+      const simulation = await flashbotsProvider.simulate(signedBundle, targetBlocks[0]);
       
       if ('error' in simulation) {
         const simError = (simulation as any).error.message || 'Simulation Failure';
-        logger.error(`[Flashbots][SIM-FAIL] Block ${targetBlock} | Reason: ${simError}`);
+        logger.error(`[Flashbots][SIM-FAIL] Block ${targetBlocks[0]} | Reason: ${simError}`);
         return { success: false, error: 'SIMULATION_REJECTED', rejectionReason: simError };
       }
 
@@ -142,41 +147,43 @@ export const flashbotsExecution = {
 
       const totalGas = (simulation as any).totalGasUsed || 0n;
       logger.info(`[Flashbots] Bundle Pre-Flight Success. Gas: ${totalGas.toString()}`);
+      logger.info(`[Overdrive] Saturation Active: Blasting blocks ${targetBlocks.join(', ')}`);
 
-      // 6. SECURE SUBMISSION (UPGRADED: Multi-Relay Parallel Broadcast)
-      const bundleSubmissions = await Promise.all(flashbotsProviders.map(p => 
-        p.sendRawBundle(signedBundle, targetBlock)
-      ));
+      // 6. SECURE SUBMISSION (UPGRADED: Multi-Relay & Multi-Block Parallel Broadcast)
+      const bundleSubmissions = await Promise.all(
+        flashbotsProviders.flatMap(p => 
+          targetBlocks.map(block => p.sendRawBundle(signedBundle, block))
+        )
+      );
       
-      const bundleSubmission = bundleSubmissions[0]; // Reference primary for status
+      const primarySubmission = bundleSubmissions[0]; // Reference primary (Flashbots @ Block +1)
       
-      if ('error' in bundleSubmission) {
-        const relayError = (bundleSubmission as any).error.message;
+      if ('error' in primarySubmission) {
+        const relayError = (primarySubmission as any).error.message;
         logger.warn(`[Flashbots][REJECTED] Relay Response: ${relayError}`);
         return { success: false, error: 'RELAY_REJECTION', rejectionReason: relayError };
       }
 
       // 7. RESOLUTION TRACKING
-      const waitResponse = await (bundleSubmission as any).wait();
+      // We race the inclusion across all submitted block targets
+      const waitResults = await Promise.all(bundleSubmissions.map(s => (s as any).wait()));
+      const inclusionIndex = waitResults.findIndex(res => res === FlashbotsBundleResolution.BundleIncluded);
       
-      if (waitResponse === FlashbotsBundleResolution.BundleIncluded) {
+      if (inclusionIndex !== -1) {
+        const winningSubmission = bundleSubmissions[inclusionIndex];
         // UPGRADE: Use Institutional TX Logger
-        logger.tx((bundleSubmission as any).bundleHash || 'MEV_BUNDLE', chainConfig.name, { targetBlock, gas: totalGas });
-        logger.info(`[Flashbots][SUCCESS] Bundle mined in ${targetBlock}`);
+        logger.tx((winningSubmission as any).bundleHash || 'MEV_BUNDLE', chainConfig.name, { targetBlock: 'MULTI', gas: totalGas });
+        logger.info(`[Flashbots][SUCCESS] Bundle mined via Overdrive Saturation`);
         return { 
           success: true, 
-          txHash: (bundleSubmission as any).bundleHash || 'CONFIRMED',
+          txHash: (winningSubmission as any).bundleHash || 'CONFIRMED',
           gasUsed: totalGas,
-          targetBlock
+          targetBlock: targetBlocks 
         };
       } 
       
-      if (waitResponse === FlashbotsBundleResolution.BlockPassedWithoutInclusion) {
-        logger.warn(`[Flashbots][TIMEOUT] Bundle not included in ${targetBlock}. Retrying suggested.`);
-        return { success: false, error: 'BLOCK_PASSED', targetBlock };
-      }
-
-      return { success: false, error: `RESOLUTION_UNRECOGNIZED_${waitResponse}` };
+      logger.warn(`[Flashbots][TIMEOUT] Bundle not included in target range. Retrying suggested.`);
+      return { success: false, error: 'BLOCK_PASSED', targetBlock: targetBlocks };
 
     } catch (err: any) {
       // Ensure sensitive data is cleared even on unexpected crashes
