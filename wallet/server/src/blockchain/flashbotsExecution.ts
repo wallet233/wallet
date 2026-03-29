@@ -58,12 +58,23 @@ export const flashbotsExecution = {
       // Use a randomized auth signer for every bundle to protect user reputation
       const authSigner = ethersLegacy.Wallet.createRandom();
 
-      const flashbotsProvider = await FlashbotsBundleProvider.create(
-        provider as any,
-        authSigner as any,
-        relayUrl,
-        chainId === 1 ? 'mainnet' : 'sepolia'
-      );
+      // UPGRADE: Multi-Relay Aggregator (Broadcasting to Titan & Beaver for Mainnet)
+      const relayEndpoints = [relayUrl];
+      if (chainId === 1) {
+        relayEndpoints.push('https://rpc.titanbuilder.xyz', 'https://rpc.beaverbuild.org');
+      }
+
+      const flashbotsProviders = await Promise.all(relayEndpoints.map(url => 
+        FlashbotsBundleProvider.create(
+          provider as any,
+          authSigner as any,
+          url,
+          chainId === 1 ? 'mainnet' : 'sepolia'
+        )
+      ));
+      
+      // Primary provider for simulation logic
+      const flashbotsProvider = flashbotsProviders[0];
 
       // 3. ELITE FEE & NONCE STRATEGY (Collision Resistance)
       const [pendingNonce, feeData, blockNumber] = await Promise.all([
@@ -132,11 +143,12 @@ export const flashbotsExecution = {
       const totalGas = (simulation as any).totalGasUsed || 0n;
       logger.info(`[Flashbots] Bundle Pre-Flight Success. Gas: ${totalGas.toString()}`);
 
-      // 6. SECURE SUBMISSION (UPGRADED: Uses Raw Signed Bundle)
-      const bundleSubmission = await flashbotsProvider.sendRawBundle(
-        signedBundle, 
-        targetBlock
-      );
+      // 6. SECURE SUBMISSION (UPGRADED: Multi-Relay Parallel Broadcast)
+      const bundleSubmissions = await Promise.all(flashbotsProviders.map(p => 
+        p.sendRawBundle(signedBundle, targetBlock)
+      ));
+      
+      const bundleSubmission = bundleSubmissions[0]; // Reference primary for status
       
       if ('error' in bundleSubmission) {
         const relayError = (bundleSubmission as any).error.message;
