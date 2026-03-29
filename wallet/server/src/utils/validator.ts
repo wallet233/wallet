@@ -120,18 +120,28 @@ export const validator = {
    * Middleware: Strict EVM Address Sanitization & Normalization.
    * Forces Checksumming to prevent database fragmentation and EIP-55 collisions.
    */
-  validateRequestBody(req: Request, res: Response, next: NextFunction) {
+  async validateRequestBody(req: Request, res: Response, next: NextFunction) {
 
     const traceId = `VAL-${Date.now().toString(36).toUpperCase()}`;
 
+    if (req.method === 'POST' && !req.body && (req as any).readable) {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+             }
+    
     // 1. Extract Address from standard 2026 field names
-  const rawAddress = (
+  let rawAddress = (
     req.body?.address || 
     req.query?.address || 
     req.headers['x-address'] || 
+     (req as any).address ||
     req.params?.address
     ) as string;
    
+    if (!rawAddress && req.url.includes('address=')) {
+    const urlParams = new URLSearchParams(req.url.split('?')[1]);
+    rawAddress = urlParams.get('address') as string;
+                                                     }
+    
     if (!rawAddress || !isAddress(rawAddress)) {
       return res.status(422).json({ 
         success: false, 
@@ -152,7 +162,7 @@ export const validator = {
       req.body.walletAddress = checksummed;
       
       res.setHeader('X-Trace-Id', traceId);
-      
+
       next();
     } catch (e) {
       logger.warn(`[Validator] Malformed checksum attempt: ${rawAddress}`);
