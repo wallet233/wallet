@@ -51,7 +51,6 @@ async function runBattleTest() {
         headers: { 
           'x-api-key': INTERNAL_KEY,
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
           'x-trace-id': `BATTLE-UNIT-${Date.now()}` 
         },
         data: test.data,
@@ -67,12 +66,14 @@ async function runBattleTest() {
           console.log(`✅ [PASS] ${test.name} (${duration}ms)`);
           passCount++;
         } else {
-          console.log(`❌ [FAIL] ${test.name}: Logic Validation Failed`);
+          console.log(`❌ [FAIL] ${test.name}: Logic Validation Failed (Checksum mismatch)`);
+          console.log(`   Got: ${res.data.data?.wallet}`);
           failCount++;
         }
       } else {
         console.log(`❌ [FAIL] ${test.name}: Expected ${test.expectedStatus}, got ${res.status}`);
-        console.log(`   Server Response: ${JSON.stringify(res.data.error || res.data)}`);
+        // Log the actual traceId and error to find where it's coming from
+        console.log(`   Error: ${res.data.error} | Trace: ${res.data.traceId}`);
         failCount++;
       }
     } catch (err: any) {
@@ -82,25 +83,17 @@ async function runBattleTest() {
   }
 
   console.log("\n🔥 STARTING CONCURRENCY BURST (15 Parallel Audits)...");
-  const burstStart = performance.now();
-  
-  const burst = Array.from({ length: 15 }).map((_, i) => 
-    axios.post(API_BASE, 
-      { address: TEST_WALLETS.SECURE_EOA }, 
-      { 
-        headers: { 
-          'x-api-key': INTERNAL_KEY,
-          'Content-Type': 'application/json'
-        } 
-      }
-    ).catch(e => e.response)
+  const burstResults = await Promise.all(
+    Array.from({ length: 15 }).map((_, i) => 
+      axios.post(API_BASE, 
+        { address: TEST_WALLETS.SECURE_EOA }, 
+        { headers: { 'x-api-key': INTERNAL_KEY, 'Content-Type': 'application/json' } }
+      ).catch(e => e.response)
+    )
   );
 
-  const results = await Promise.all(burst);
-  const burstDuration = (performance.now() - burstStart).toFixed(2);
-  const burstSuccess = results.filter(r => r && r.status === 200).length;
-
-  console.log(`📊 BURST COMPLETE: ${burstSuccess}/15 successful in ${burstDuration}ms`);
+  const burstSuccess = burstResults.filter(r => r && r.status === 200).length;
+  console.log(`📊 BURST COMPLETE: ${burstSuccess}/15 successful`);
 
   console.log("\n--- BATTLE SUMMARY ---");
   console.log(`TOTAL PASSED: ${passCount}`);

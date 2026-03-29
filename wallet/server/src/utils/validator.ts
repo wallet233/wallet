@@ -122,8 +122,13 @@ export const validator = {
    */
   validateRequestBody(req: Request, res: Response, next: NextFunction) {
     // 1. Extract Address from standard 2026 field names
-  const rawAddress = (req.body?.address || req.query?.address || req.body?.walletAddress || req.params?.address) as string;
-    
+  const rawAddress = (
+    req.body?.address || 
+    req.query?.address || 
+    req.headers['x-address'] || 
+    req.params?.address
+    ) as string;
+   
     if (!rawAddress || !isAddress(rawAddress)) {
       return res.status(422).json({ 
         success: false, 
