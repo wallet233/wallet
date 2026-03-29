@@ -12,7 +12,7 @@ export async function scanSecurityController(req: Request, res: Response) {
   const startTime = performance.now();
   
   // 1. Normalize input: Support both high-level Superchain scans and specific L2s
-  const rawAddress = (req.query.address || req.body.address) as string;
+  const rawAddress = (req.body.address || req.query.address) as string;
   const network = ((req.query.network || req.body.network || 'superchain') as string).toLowerCase();
   const refresh = req.query.refresh === 'true'; // Force bypass cache for high-stakes audits
   

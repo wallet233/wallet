@@ -137,10 +137,10 @@ export const validator = {
       const checksummed = getAddress(rawAddress);
       
       // Inject back into the request pipeline to ensure all services use the same format
-      if (req.body.address) req.body.address = checksummed;
+      if (req.body) req.body.address = checksummed;
       if (req.body.walletAddress) req.body.walletAddress = checksummed;
       if (req.params.address) req.params.address = checksummed;
-      if (req.query.address) req.query.address = checksummed;
+      if (req.query) req.query.address = checksummed;
       
       next();
     } catch (e) {
