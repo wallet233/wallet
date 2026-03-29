@@ -18,6 +18,7 @@ export interface BundleResult {
  * BATTLE-HARDENED: Institutional Flashbots & MEV-Shield Engine (v2026.10).
  * UPGRADES: Nonce-Collision Protection, Strict Memory Purgatory, and Multi-Relay Logic.
  * SECURITY: Implements Tier-1 Private Key handling with mandatory heap-cleaning.
+ * FIX: Raw-Hex Bundle Signing to prevent 'Go unmarshal object into string' relay errors.
  */
 export const flashbotsExecution = {
   async executeBundle(
@@ -78,12 +79,13 @@ export const flashbotsExecution = {
       // Post-Pectra Hardening: Max fee headroom at 3.0x base for volatility
       const maxFee = (feeData.maxFeePerGas ?? ethersLegacy.parseUnits('25', 'gwei')) * 30n / 10n + priorityFee;
 
-      // 4. ATOMIC BUNDLE CONSTRUCTION
-      const signedBundle = payloads.map((tx, i) => {
+      // 4. ATOMIC BUNDLE CONSTRUCTION (UPGRADED: Hex Serialization)
+      const bundleTransactions = payloads.map((tx, i) => {
         const isEIP1559 = chainConfig.supportsEIP1559 !== false;
         
-        const txValue = tx.value ? BigInt(tx.value) : 0n;
-        const txGas = tx.gasLimit ? BigInt(tx.gasLimit) : 250000n; 
+        // Strict normalization to Hex strings to prevent BigInt serialization crashes
+        const txValue = tx.value ? ethersLegacy.toQuantity(BigInt(tx.value)) : "0x0";
+        const txGas = tx.gasLimit ? ethersLegacy.toQuantity(BigInt(tx.gasLimit)) : ethersLegacy.toQuantity(250000n); 
 
         return { 
           signer: userWallet as any,
@@ -96,19 +98,23 @@ export const flashbotsExecution = {
             type: isEIP1559 ? 2 : 0,
             nonce: pendingNonce + i,
             ...(isEIP1559 ? {
-              maxFeePerGas: maxFee,
-              maxPriorityFeePerGas: priorityFee,
+              maxFeePerGas: ethersLegacy.toQuantity(maxFee),
+              maxPriorityFeePerGas: ethersLegacy.toQuantity(priorityFee),
             } : {
-              gasPrice: (feeData.gasPrice ?? ethersLegacy.parseUnits('20', 'gwei')) + priorityEscalation
+              gasPrice: ethersLegacy.toQuantity((feeData.gasPrice ?? ethersLegacy.parseUnits('20', 'gwei')) + priorityEscalation)
             })
           }
         };
       });
 
+      // UPGRADE: Pre-sign the bundle to convert objects to the raw strings the Relay Go-backend expects
+      const signedBundle = await flashbotsProvider.signBundle(bundleTransactions);
+
       const targetBlock = blockNumber + 1;
      
       // 5. FORENSIC SIMULATION (Revert Guard)
-      const simulation = await flashbotsProvider.simulate(signedBundle as any, targetBlock);
+      // Using signedBundle (Array of strings) instead of bundleTransactions (Array of objects)
+      const simulation = await flashbotsProvider.simulate(signedBundle, targetBlock);
       
       if ('error' in simulation) {
         const simError = (simulation as any).error.message || 'Simulation Failure';
@@ -126,9 +132,9 @@ export const flashbotsExecution = {
       const totalGas = (simulation as any).totalGasUsed || 0n;
       logger.info(`[Flashbots] Bundle Pre-Flight Success. Gas: ${totalGas.toString()}`);
 
-      // 6. SECURE SUBMISSION
-      const bundleSubmission = await flashbotsProvider.sendBundle(
-        signedBundle as any, 
+      // 6. SECURE SUBMISSION (UPGRADED: Uses Raw Signed Bundle)
+      const bundleSubmission = await flashbotsProvider.sendRawBundle(
+        signedBundle, 
         targetBlock
       );
       
@@ -142,6 +148,8 @@ export const flashbotsExecution = {
       const waitResponse = await (bundleSubmission as any).wait();
       
       if (waitResponse === FlashbotsBundleResolution.BundleIncluded) {
+        // UPGRADE: Use Institutional TX Logger
+        logger.tx((bundleSubmission as any).bundleHash || 'MEV_BUNDLE', chainConfig.name, { targetBlock, gas: totalGas });
         logger.info(`[Flashbots][SUCCESS] Bundle mined in ${targetBlock}`);
         return { 
           success: true, 
@@ -161,7 +169,7 @@ export const flashbotsExecution = {
     } catch (err: any) {
       // Ensure sensitive data is cleared even on unexpected crashes
       if (rawKey) clearSensitiveData(rawKey); 
-      logger.error(`[Flashbots][FATAL] ${err.message}`);
+      logger.error(`[Flashbots][FATAL] ${err.message}`, { stack: err.stack });
       return { success: false, error: err.message || 'INTERNAL_ENGINE_ERROR' };
     } finally {
       // Final safety purge
