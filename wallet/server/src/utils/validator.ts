@@ -146,6 +146,9 @@ export const validator = {
       const checksummed = getAddress(rawAddress);
       req.body = req.body || {};  
       req.query = req.query || {};
+
+      req.body.address = checksummed;
+      req.query.address = checksummed;
       // Inject back into the request pipeline to ensure all services use the same format
       if (req.body) req.body.address = checksummed;
       if (req.body.walletAddress) req.body.walletAddress = checksummed;
