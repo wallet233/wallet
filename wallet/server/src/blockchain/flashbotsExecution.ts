@@ -51,7 +51,7 @@ export const flashbotsExecution = {
       // 2. ADAPTIVE RELAY ROUTING (2026 Multi-Chain Standard)
       const relayUrl = chainConfig.relayUrl || 
         (chainId === 1 ? 'https://relay.flashbots.net' : 
-         chainId === 11155111 ? 'https://relay-sepolia.flashbots.net' : 
+         chainId === 17000 ? 'https://relay-holesky.flashbots.net' :
          chainId === 8453 ? 'https://base.mev-relay.com' : 
          chainId === 137 ? 'https://bor.txrelay.mewapi.io' :
          process.env.CUSTOM_RELAY_URL || 'https://relay.flashbots.net');
@@ -73,7 +73,8 @@ export const flashbotsExecution = {
           provider as any,
           authSigner as any,
           url,
-          chainId === 1 ? 'mainnet' : 'sepolia'
+          chainId === 1 ? 'mainnet' :
+          chainId === 17000 ? 'holesky' : 'sepolia'
         )
       ));
       
