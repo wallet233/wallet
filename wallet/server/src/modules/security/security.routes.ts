@@ -6,15 +6,33 @@ const router = express.Router();
 
 /**
  * 2026 CONCURRENCY SHIELD:
- * Force JSON parsing at the start of this router. 
- * This ensures the 'Standard POST' and 'Burst' tests have a body 
- * before the Validator runs.
+ * Ensures JSON parsing is scoped to this router to handle heavy 
+ * security payloads without interfering with global middleware.
  */
 router.use(express.json());
 
-// Apply Validator AFTER the local body-parser
-router.get('/scan', validator.validateRequestBody, scanSecurityController);
-router.post('/scan', validator.validateRequestBody, scanSecurityController);
+/**
+ * 2026 UNIFIED INPUT ADAPTER:
+ * Normalizes 'address' and 'network' from either Query (GET) or Body (POST).
+ * This allows the stress script to hit the endpoint using various methods
+ * while keeping the Controller logic clean and focused.
+ */
+const normalizeInput = (req: any, res: any, next: any) => {
+  req.body = {
+    ...req.body,
+    address: req.body.address || req.query.address,
+    network: req.body.network || req.query.network || 'ethereum'
+  };
+  next();
+};
+
+/**
+ * SECURITY ENDPOINTS:
+ * 1. GET: Useful for quick browser-based audits or status checks.
+ * 2. POST: The primary "Battle Route" for heavy, authenticated scans.
+ */
+router.get('/scan', normalizeInput, validator.validateRequestBody, scanSecurityController);
+router.post('/scan', normalizeInput, validator.validateRequestBody, scanSecurityController);
 
 export const routeConfig = {
   path: '/v1/security',
