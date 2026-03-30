@@ -95,7 +95,7 @@ export const EVM_CHAINS: ChainConfig[] = [
   { id: 80002, name: 'Polygon Amoy', symbol: 'POL', rpcs: ['https://rpc-amoy.polygon.technology'], explorer: 'https://amoy.polygonscan.com', blockTimeSec: 2, nativePriceId: 'matic-network', supportsEIP1559: true },
   { id: 97, name: 'BNB Testnet', symbol: 'tBNB', rpcs: ['https://bsc-testnet.drpc.org'], explorer: 'https://testnet.bscscan.com', blockTimeSec: 3, nativePriceId: 'binancecoin', supportsEIP1559: false },
   { id: 1337, name: 'Localhost', symbol: 'ETH', rpcs: ['http://127.0.0.1:8545'], explorer: '', blockTimeSec: 1, nativePriceId: 'ethereum', supportsEIP1559: true },
-    { id: 17000, name: 'Holesky', symbol: 'ETH', rpcs: getRpcs(17000, ['https://ethereum-holesky-rpc.publicnode.com', 'https://holesky.drpc.org'], 'eth-holesky'), relayUrl: 'https://relay-holesky.flashbots.net', explorer: 'https://holesky.etherscan.io', isL2: false, blockTimeSec: 12, nativePriceId: 'ethereum', supportsEIP1559: true }
+
 ];
 
 /* ======= */

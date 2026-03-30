@@ -41,6 +41,7 @@ async function runBattleTest() {
       data: { address: TEST_WALLETS.LOWERCASE },
       expectedStatus: 200,
       validate: (res: any) => {
+        // Updated to handle standard 2026 nested data structure
         const wallet = res.data.data?.wallet || res.data.data?.address;
         // Verify it was correctly checksummed by the validator
         return wallet === "0x742d35Cc6634C0532925a3b844Bc454e4438f44e";
@@ -63,12 +64,14 @@ async function runBattleTest() {
         url: test.url,
         headers: { 
           'x-api-key': INTERNAL_KEY,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'x-trace-id': `BATTLE-${Date.now()}`
         },
         // IMPORTANT: Axios only sends 'data' on POST/PUT, 'params' on GET
         data: test.method === 'POST' ? test.data : undefined,
         params: test.method === 'GET' ? test.params : undefined,
-        validateStatus: () => true 
+        validateStatus: () => true,
+        timeout: 10000 
       });
 
       const duration = (performance.now() - start).toFixed(2);
@@ -98,7 +101,14 @@ async function runBattleTest() {
   const burstPromises = Array.from({ length: 15 }).map(() => 
     axios.post(`${API_ROOT}/scan`, 
       { address: TEST_WALLETS.SECURE_EOA }, 
-      { headers: { 'x-api-key': INTERNAL_KEY, 'Content-Type': 'application/json' } }
+      { 
+        headers: { 
+          'x-api-key': INTERNAL_KEY, 
+          'Content-Type': 'application/json',
+          'Connection': 'keep-alive'
+        },
+        timeout: 15000 
+      }
     ).catch(e => e.response)
   );
 

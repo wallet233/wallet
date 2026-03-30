@@ -25,7 +25,8 @@ export async function scanSecurityController(req: Request, res: Response) {
     throw new Error('MISSING_ADDRESS_AFTER_VALIDATION');
                      }
 
-    const checksummedAddress = rawAddress;
+    // UPGRADE: Apply getAddress to ensure the Battle Test "Checksum" logic passes
+    const checksummedAddress = isAddress(rawAddress) ? getAddress(rawAddress) : rawAddress;
     
     // 3. Parallel Intelligence Gathering (EIP-7702 & Allowances)
     logger.info(`[SecurityController][${traceId}] Full Audit: ${checksummedAddress} | Network: ${network} | Mode: ${refresh ? 'FORCED_REFRESH' : 'CACHED'}`);

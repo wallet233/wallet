@@ -40,6 +40,10 @@ export function getNetworkUrl(network: string): string {
   // 2. Build Alchemy URL if key exists
   const alchemyKey = process.env.ALCHEMY_API_KEY || process.env.ALCHEMY_KEY;
   if (alchemyKey) {
+    // UPGRADE: Resilience check. If the env var is already a full URL, return it directly to avoid 404 double-prefixing.
+    if (alchemyKey.startsWith('http')) {
+      return alchemyKey;
+    }
     const slug = NETWORK_CONFIG[cleanName] || `${cleanName}-mainnet`;
     return `https://${slug}.g.alchemy.com/v2/${alchemyKey}`;
   }
@@ -106,7 +110,9 @@ export function getProvider(rpcOrNetworkOrChainId: string | number, chainIdOverr
       request.setHeader("Accept", "application/json");
         request.setHeader("Content-Type", "application/json");
     
-  const provider = new JsonRpcProvider(request, finalChainId, {
+  // UPGRADE: Ensure staticNetwork is paired with a valid chainId to stop the network detection loop
+  // If finalChainId is missing, we fallback to 1 (Mainnet) or the specific L2 ID if known
+  const provider = new JsonRpcProvider(request, finalChainId || (url.includes('base') ? 8453 : 1), {
     staticNetwork: true,
     batchMaxCount: 50,
     batchMaxSize: 2 * 1024 * 1024,

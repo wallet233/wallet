@@ -21,7 +21,7 @@ import { startHealthWorker } from './workers/walletHealthWorker.js';
 (async () => {
   try {
     // 1. PRE-FLIGHT CHECKS
-    // Fail fast if 'real money' environment variables are missing
+    // Fail fast if environment variables are missing
     validateEnv();
     await connectDB();
 

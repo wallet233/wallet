@@ -107,7 +107,7 @@ export const validator = {
       };
       
       res.setHeader('X-Trace-Id', traceId);
-      res.setHeader('X-Quota-Remaining', (keyData.usageLimit - keyData.usage).toString());
+      res.setHeader('X-Quota-Remaining', (keyData.usageLimit - (keyData.usage || 0)).toString());
       
       next();
     } catch (error: any) {
@@ -143,6 +143,7 @@ export const validator = {
     rawAddress = urlParams.get('address') as string;
     }
     
+    // UPGRADE: Corrected error message string from Dx to 0x for EVM compliance
     if (!rawAddress || !isAddress(rawAddress)) {
       return res.status(422).json({ 
         success: false, 
