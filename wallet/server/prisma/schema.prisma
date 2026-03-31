@@ -192,3 +192,38 @@ model ApiAnalytics {
 
   @@index([apiKeyId, createdAt])
 }
+// --- WIP SECURITY INTELLIGENCE MODELS ---
+
+model SecurityLiveRegistry {
+  id                String   @id // format: "chainId-address"
+  address           String
+  chainId           Int
+  symbol            String?
+  status            String   // verified | spam | dust | clean | malicious
+  securityNote      String?
+  usdValue          Float    @default(0)
+  fingerprint       String   // keccak256(bytecode + implementationSlot)
+  isHoneypot        Boolean  @default(false)
+  sellTax           Float    @default(0)
+  
+  
+  timesScanned      Int      @default(1)
+  lastChangeFound   DateTime?
+  lastScanned       DateTime @default(now())
+
+  @@unique([address, chainId])
+  @@index([status])
+}
+
+model SecurityMasterArchive {
+  id                String   @id @default(cuid())
+  address           String
+  chainId           Int
+  previousStatus    String
+  newStatus         String
+  fingerprint       String
+  changeType        String   // NEW_DISCOVERY | PROXY_UPGRADE | RE_VERIFICATION
+  capturedAt        DateTime @default(now())
+
+  @@index([address, chainId])
+}

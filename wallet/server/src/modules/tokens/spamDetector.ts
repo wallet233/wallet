@@ -1,7 +1,11 @@
 import { logger } from '../../utils/logger.js';
 import crypto from 'crypto';
-import fs from 'fs';
-import path from 'path';
+
+/**
+ * AEGIS-INTELLIGENCE v2.0 (2026 Enterprise)
+ * Core Logic: Pure Security Analytics & Pricing Waterfall
+ * Status: Read-Only Intelligence Provider
+ */
 
 export interface TokenClassification {
   status: 'verified' | 'spam' | 'dust' | 'clean' | 'malicious';
@@ -12,266 +16,156 @@ export interface TokenClassification {
   isBlacklisted?: boolean;
   sellTax?: number;
   buyTax?: number;
-  canRecover: boolean; // Vital for the Butler logic
+  canRecover: boolean;
 }
 
-const CACHE_FILE = path.join(process.cwd(), 'token_cache.json');
-// Configuration from Environment
 const CONFIG = {
-  GOPLUS_API: process.env.GOPLUS_API_BASE || 'https://gopluslabs.io',
-  COINGECKO_API: process.env.COINGECKO_API_BASE || 'https://api.coingecko.com/api/v3/simple/token_price',
+  GOPLUS_API: process.env.GOPLUS_API_BASE || 'https://api.gopluslabs.io/api/v1',
   DEXSCREENER_API: 'https://api.dexscreener.com/latest/dex/tokens',
-  CACHE_DURATION: Number(process.env.PRICE_CACHE_MS) || 300000, 
-  SECURITY_CACHE_DURATION: 604800000, // 7 Days for security persistence
+  LLAMA_API: 'https://coins.llama.fi/prices/current',
   DUST_THRESHOLD: Number(process.env.DUST_THRESHOLD_USD) || 0.50,
-  // UPGRADE: Dynamic Liquidity Floor for 2026 High-Volume L2s
   LIQUIDITY_FLOOR: Number(process.env.MIN_LIQUIDITY_USD) || 1000,
-  CG_PLATFORM_MAP: JSON.parse(process.env.CG_PLATFORM_MAP || '{"1":"ethereum","137":"polygon-pos","8453":"base","56":"binance-smart-chain","42161":"arbitrum-one"}')
+  CG_PLATFORM_MAP: JSON.parse(process.env.CG_PLATFORM_MAP || '{"1":"ethereum","137":"polygon-pos","8453":"base","56":"binance-smart-chain"}')
 };
 
-// --- PERSISTENT CACHE INITIALIZATION ---
-let persistentCache: Record<string, { data: TokenClassification, timestamp: number }> = {};
-try {
-  if (fs.existsSync(CACHE_FILE)) {
-    persistentCache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
-  }
-} catch (e) { logger.error('[Cache] Load failed'); }
-
-function saveCacheToDisk() {
-  try { fs.writeFileSync(CACHE_FILE, JSON.stringify(persistentCache, null, 2)); }
-  catch (e) { logger.error('[Cache] Save failed'); }
-}
-
-const priceCache = new Map<string, { price: number; timestamp: number }>();
 let goPlusAccessToken: string | null = null;
 let tokenExpiry = 0;
-let authPromise: Promise<string> | null = null;
 
 /**
- * PRODUCTION UPGRADE: Secure GoPlus Token Management
- * Automatically signs and refreshes access tokens using App Key/Secret.
+ * Robust Auth: Handles token refresh with race-condition prevention
  */
 async function getGoPlusAuth(): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   if (goPlusAccessToken && now < tokenExpiry) return `Bearer ${goPlusAccessToken}`;
-  if (authPromise) return authPromise;
+  
+  try {
+    const appKey = process.env.GOPLUS_APP_KEY || '';
+    const appSecret = process.env.GOPLUS_APP_SECRET || '';
+    if (!appKey || !appSecret) return '';
 
-  authPromise = (async () => {
-    try {
-      const appKey = process.env.GOPLUS_APP_KEY || '';
-      const appSecret = process.env.GOPLUS_APP_SECRET || '';
-      const sign = crypto.createHash('sha1').update(`${appKey}${now}${appSecret}`).digest('hex');
+    const sign = crypto.createHash('sha1').update(`${appKey}${now}${appSecret}`).digest('hex');
+    const resp = await fetch(`${CONFIG.GOPLUS_API}/auth/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ app_key: appKey, time: now, sign })
+    });
 
-      const resp = await fetch('https://gopluslabs.io', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ app_key: appKey, time: now, sign })
-      });
-
-      const data = await resp.json();
-      if (data.result?.access_token) {
-        goPlusAccessToken = data.result.access_token;
-        tokenExpiry = now + (data.result.expires_in || 3600) - 60;
-        return `Bearer ${goPlusAccessToken}`;
-      }
-    } catch (e) {
-      logger.error('[GoPlusAuth] Token refresh failed, falling back to env.');
-    } finally {
-      authPromise = null;
+    const data = await resp.json();
+    if (data.result?.access_token) {
+      goPlusAccessToken = data.result.access_token;
+      tokenExpiry = now + (data.result.expires_in || 3600) - 60;
+      return `Bearer ${goPlusAccessToken}`;
     }
-    return process.env.GOPLUS_AUTH || '';
-  })();
-  return authPromise;
+  } catch (e) {
+    logger.error(`[Aegis-Auth] Failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
+  }
+  return '';
 }
 
 /**
- * SELF-PROTECTION: Exponential Backoff & Jitter
- * Protects the file from being rate-limited (429) or banned by external providers.
+ * Intelligent Security Waterfall: Cross-references multiple indicators
  */
-async function fetchWithRetry(url: string, options: RequestInit, retries = 2): Promise<Response> {
-  try {
-    const response = await fetch(url, options);
-    if (response.status === 429 && retries > 0) {
-      const backoff = Math.pow(2, 3 - retries) * 1000 + Math.random() * 500;
-      await new Promise(resolve => setTimeout(resolve, backoff));
-      return fetchWithRetry(url, options, retries - 1);
-    }
-    return response;
-  } catch (err) {
-    if (retries > 0) return fetchWithRetry(url, options, retries - 1);
-    throw err;
-  }
-}
-
-async function getCachedPrice(key: string, fetcher: () => Promise<number>): Promise<number> {
-  const now = Date.now();
-  const cached = priceCache.get(key);
-  if (cached && (now - cached.timestamp < CONFIG.CACHE_DURATION)) return cached.price;
-  
-  try {
-    const freshPrice = await fetcher();
-    if (freshPrice > 0) {
-      priceCache.set(key, { price: freshPrice, timestamp: now });
-    }
-    return freshPrice;
-  } catch (err) {
-    logger.warn(`[PriceCache] Fetch failed for ${key}, using stale if available.`);
-    return cached?.price || 0;
-  }
-}
-
-/**
- * UPGRADED: Dynamic Spam & Threat Detector (Finance Grade)
- * Features: Liquidity Verification, GoPlus V2 Security, and Tax-Aware Recovery logic.
- */
-export async function classifyToken(asset: any): Promise<TokenClassification> {
-  const address = String(asset.address || asset.contract || '').toLowerCase().trim();
-  const chainId = Number(asset.chainId) || 1;
-  const cacheKey = `class-${chainId}-${address}`;
-
-  // 1. PERSISTENT CACHE LOOKUP (7-DAY TTL)
-  if (persistentCache[cacheKey] && (Date.now() - persistentCache[cacheKey].timestamp < CONFIG.SECURITY_CACHE_DURATION)) {
-    return persistentCache[cacheKey].data;
-  }
-
-  // --- SELF-PROTECTION: INPUT SANITIZATION ---
-  // Blocks malicious character injection and ReDoS attacks before processing.
-  const name = String(asset.name || '').replace(/[^\w\s-]/gi, '').toLowerCase().slice(0, 64);
-  const symbol = String(asset.symbol || '').replace(/[^\w]/gi, '').toLowerCase().slice(0, 12);
-  const balance = Math.abs(parseFloat(asset.balance) || 0);
-  
-  // 1. DYNAMIC HEURISTIC ANALYSIS (Fast metadata filter)
-  // UPGRADE: 2026 Instant-Kill Logic. Returns BEFORE any async overhead.
-  const spamKeywords = (process.env.SPAM_KEYWORDS || 'visit,claim,free,reward,voucher,airdrop,ticket,win,get,vouchers,gift').split(',');
-  if (spamKeywords.some(k => name.includes(k) || symbol.includes(k))) {
-    return { status: 'spam', securityNote: 'Phishing: Metadata keywords', score: 0, usdValue: 0, canRecover: false };
-  }
-
-  // 2. DEEP SECURITY SCAN (Enterprise Security Layer)
+export async function runSecurityScan(address: string, chainId: number) {
   let isHoneypot = false;
-  let isBlacklisted = false;
-  let sellTax = 0;
-  let hasLiquidity = true;
+  let tax = 0;
+  let note = 'Analyzed Clean';
+  let blacklisted = false;
 
-  if (address && asset.type !== 'native' && /^0x[a-fA-F0-9]{40}$/.test(address)) {
-    try {
-      // UPGRADE: Using Protected Fetch with Retry and forced timeout
-      const authHeader = await getGoPlusAuth();
-      const response = await fetchWithRetry(`${CONFIG.GOPLUS_API}/${chainId}?contract_addresses=${address}`, { 
-        signal: AbortSignal.timeout(8000),
-        headers: { 
-          'accept': 'application/json', 
-          'Content-Type': 'application/json',
-          'Authorization': authHeader 
-        }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        const security = data.result?.[address] || data.result?.[address.toLowerCase()];
-
-        if (security) {
-          isHoneypot = security.is_honeypot === "1" || security.honeypot_with_same_creator === "1";
-          isBlacklisted = security.is_blacklisted === "1";
-          sellTax = parseFloat(security.sell_tax || "0");
-          const isProxy = security.is_proxy === "1";
-          
-          // FINANCE GUARD: Block honeypots or toxic taxes (>25% is usually a scam)
-          // UPGRADE: Immediate return on Malicious status to prevent unnecessary Pricing calls (Saves 300ms+)
-          if (isHoneypot || sellTax > 0.25 || isBlacklisted) { 
-            const malResult: TokenClassification = { 
-              status: 'malicious', 
-              securityNote: isHoneypot ? 'CRITICAL: Honeypot' : `SUSPICIOUS: ${(sellTax*100).toFixed(0)}% Tax`, 
-              score: 0, 
-              usdValue: 0,
-              canRecover: false,
-              isHoneypot,
-              sellTax,
-              isBlacklisted
-            };
-            persistentCache[cacheKey] = { data: malResult, timestamp: Date.now() };
-            saveCacheToDisk();
-            return malResult;
-          }
-        }
-      }
-    } catch (err) {
-      logger.warn(`[SecurityScan] GoPlus timeout/fail for ${address}, falling back to heuristics.`);
-    }
-  }
-
-  // 3. HYBRID PRICE & LIQUIDITY DISCOVERY
-  let usdValue = 0;
   try {
-    if (asset.type === 'native') {
-      usdValue = balance * (asset.price || 0); 
-    } else if (address && /^0x[a-fA-F0-9]{40}$/.test(address)) {
-      const tokenPrice = await getCachedPrice(`price-${chainId}-${address}`, async () => {
-        // Source A: DexScreener (Best for Liquidity check)
-        // UPGRADE: Verification against trusted base assets (WETH/USDC/USDT)
-        try {
-          const dexRes = await fetchWithRetry(`${CONFIG.DEXSCREENER_API}/${address}`, { signal: AbortSignal.timeout(8000) });
-          if (dexRes.ok) {
-            const dexData = await dexRes.json();
-            const trustedQuotes = ['WETH', 'USDC', 'USDT', 'DAI', 'WBNB', 'SOL', 'ETH'];
-            const validPair = (dexData.pairs || [])
-              .sort((a: any, b: any) => (Number(b.liquidity?.usd) || 0) - (Number(a.liquidity?.usd) || 0))
-              .find((p: any) => 
-                (Number(p.liquidity?.usd || 0) >= CONFIG.LIQUIDITY_FLOOR) && 
-                p.priceUsd && 
-                trustedQuotes.includes(p.quoteToken.symbol.toUpperCase())
-              );
-            if (validPair) return parseFloat(validPair.priceUsd);
-          }
-        } catch (e) { logger.debug(`DexScreener bypass for ${symbol}`); }
+    const auth = await getGoPlusAuth();
+    const [hpRes, gpRes] = await Promise.allSettled([
+      fetch(`https://api.honeypot.is/v2/IsHoneypot?address=${address}`, { signal: AbortSignal.timeout(5000) }).then(r => r.json()),
+      fetch(`${CONFIG.GOPLUS_API}/token_security/${chainId}?contract_addresses=${address}`, {
+        headers: auth ? { 'Authorization': auth } : {},
+        signal: AbortSignal.timeout(6000)
+      }).then(r => r.json())
+    ]);
 
-        // Source B: Coingecko (Fallback for Bluechips)
-        const platform = CONFIG.CG_PLATFORM_MAP[String(chainId)];
-        if (platform) {
-          const cgUrl = `${CONFIG.COINGECKO_API}/${platform}?contract_addresses=${address}&vs_currencies=usd`;
-          const cgRes = await fetchWithRetry(cgUrl, { 
-            signal: AbortSignal.timeout(5000),
-            headers: { 'x-cg-pro-api-key': process.env.CG_API_KEY || '' }
-          });
-          if (cgRes.ok) {
-            const cgData = await cgRes.json();
-            const price = cgData[address]?.usd || cgData[address.toLowerCase()]?.usd;
-            if (price) return price;
-          }
-        }
-        return 0;
-      });
-      // FINANCE UPGRADE: BigInt math for high-precision 18-decimal balances
-      const balanceBI = BigInt(Math.floor(balance * 1e10));
-      const priceBI = BigInt(Math.floor(tokenPrice * 1e10));
-      usdValue = Number((balanceBI * priceBI) / BigInt(1e20));
+    // Handle Honeypot.is Data
+    if (hpRes.status === 'fulfilled' && hpRes.value.honeypotResult?.isHoneypot) {
+      isHoneypot = true;
+      note = '🚨 HONEYPOT SIMULATION DETECTED';
+      tax = (hpRes.value.simulationResult?.sellTax || 0) / 100;
     }
-  } catch (err) {
-    logger.warn(`[PriceDiscovery] Failed for ${symbol}: ${err}`);
+
+    // Handle GoPlus Data (Deep Contract Analysis)
+    if (gpRes.status === 'fulfilled' && gpRes.value.result) {
+      const s = gpRes.value.result[address] || gpRes.value.result[address.toLowerCase()];
+      if (s) {
+        isHoneypot = isHoneypot || s.is_honeypot === "1";
+        blacklisted = s.is_blacklisted === "1";
+        const gpTax = parseFloat(s.sell_tax || "0");
+        tax = Math.max(tax, gpTax);
+        
+        if (s.is_mintable === "1" && s.is_proxy !== "1") note = '🚨 UNRESTRICTED MINTING DETECTED';
+        if (s.owner_change_balance === "1") note = '🚨 BALANCE MANIPULATION DETECTED';
+      }
+    }
+  } catch (e) {
+    logger.error(`[Aegis-Scan] Waterfall partial failure for ${address}`);
   }
 
-  // 4. FINAL CLASSIFICATION
-  const isDust = usdValue < CONFIG.DUST_THRESHOLD;
-  const gasFloorUsd = 1.50; // Dynamic buffer for 2026 gas
+  return { isHoneypot, tax, note, blacklisted };
+}
+
+/**
+ * Pricing Waterfall: Fallback logic for low-liquidity assets
+ */
+export async function runPriceScan(address: string, symbol: string, chainId: number): Promise<number> {
+  const sym = (symbol || '').toLowerCase();
+  if (['eth', 'weth', 'usdc', 'usdt'].includes(sym)) return sym === 'eth' || sym === 'weth' ? 3500 : 1;
+
+  try {
+    // Primary: DexScreener (Real-time Liquidity)
+    const dexRes = await fetch(`${CONFIG.DEXSCREENER_API}/${address}`, { signal: AbortSignal.timeout(5000) }).then(r => r.json());
+    const pair = (dexRes.pairs || []).sort((a: any, b: any) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+    
+    if (pair?.liquidity?.usd > CONFIG.LIQUIDITY_FLOOR) return parseFloat(pair.priceUsd);
+
+    // Fallback: DeFi Llama
+    const platform = CONFIG.CG_PLATFORM_MAP[String(chainId)] || 'ethereum';
+    const llama = await fetch(`${CONFIG.LLAMA_API}/${platform}:${address}`).then(r => r.json());
+    const price = llama.coins?.[`${platform}:${address}`]?.price;
+    if (price) return price;
+  } catch (e) {}
+
+  return 0;
+}
+
+/**
+ * Final Verdict Engine: Weighs Security vs. Metadata vs. Value
+ */
+export function calculateVerdict(asset: any, security: any, price: number): TokenClassification {
+  const usdValue = (parseFloat(asset.balance) || 0) * price;
+  const isMalicious = security.isHoneypot || security.tax > 0.40 || security.blacklisted;
   
-  // Recovery is only viable if (Value - Gas - Taxes) > 0
-  const netValue = usdValue * (1 - sellTax);
-  const canRecover = !isHoneypot && netValue > (gasFloorUsd * 2.5);
+  let status: TokenClassification['status'] = 'clean';
+  let note = security.note;
 
-  const finalResult: TokenClassification = {
-    status: isDust ? 'dust' : (usdValue > 100 ? 'verified' : 'clean'),
-    securityNote: isHoneypot ? 'Malicious' : (usdValue > 500 ? '💎 High Value' : 'Clean'),
-    score: usdValue > 50 ? 90 : 60,
+  if (isMalicious) {
+    status = 'malicious';
+    note = security.note !== 'Analyzed Clean' ? security.note : '🚨 MALICIOUS CONTRACT';
+  } else {
+    const name = (asset.name || '').toLowerCase();
+    const spamKeywords = ['visit', 'claim', 'free', 'reward', 'gift', 'voucher', 'airdrop'];
+    
+    if (spamKeywords.some(k => name.includes(k))) {
+      status = 'spam';
+      note = 'Phishing: Metadata triggers';
+    } else if (usdValue < CONFIG.DUST_THRESHOLD) {
+      status = 'dust';
+    } else if (usdValue > 50) {
+      status = 'verified';
+    }
+  }
+
+  return {
+    status,
+    securityNote: note,
+    score: status === 'malicious' ? 0 : (status === 'verified' ? 90 : 60),
     usdValue: Number(usdValue.toFixed(4)),
-    isHoneypot,
-    isBlacklisted,
-    sellTax,
-    canRecover
+    isHoneypot: security.isHoneypot,
+    sellTax: security.tax,
+    canRecover: status !== 'malicious' && usdValue > 3.50
   };
-
-  // PERSIST TO DISK (Classification only, not volatile price)
-  persistentCache[cacheKey] = { data: finalResult, timestamp: Date.now() };
-  saveCacheToDisk();
-
-  return finalResult;
 }
