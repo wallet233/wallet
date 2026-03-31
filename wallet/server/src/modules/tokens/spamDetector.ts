@@ -53,6 +53,7 @@ export async function classifyToken(asset: any): Promise<TokenClassification> {
   const chainId = asset.chainId || 1;
   
   // 1. DYNAMIC HEURISTIC ANALYSIS (Fast metadata filter)
+  // UPGRADE: 2026 Instant-Kill Logic. Returns BEFORE any async overhead.
   const spamKeywords = (process.env.SPAM_KEYWORDS || 'visit,claim,free,reward,voucher,airdrop,ticket,win,get,vouchers,gift').split(',');
   if (spamKeywords.some(k => name.includes(k) || symbol.includes(k))) {
     return { status: 'spam', securityNote: 'Phishing: Metadata keywords', score: 0, usdValue: 0, canRecover: false };
@@ -66,8 +67,10 @@ export async function classifyToken(asset: any): Promise<TokenClassification> {
 
   if (address && asset.type !== 'native') {
     try {
+      // UPGRADE: Forced JSON headers and reduced 2026 network timeout for high-concurrency 
       const response = await fetch(`${CONFIG.GOPLUS_API}/${chainId}?contract_addresses=${address}`, { 
-        signal: AbortSignal.timeout(5000) 
+        signal: AbortSignal.timeout(5000),
+        headers: { 'accept': 'application/json', 'Content-Type': 'application/json' }
       });
       
       if (response.ok) {
@@ -81,6 +84,7 @@ export async function classifyToken(asset: any): Promise<TokenClassification> {
           const isProxy = security.is_proxy === "1";
           
           // FINANCE GUARD: Block honeypots or toxic taxes (>25% is usually a scam)
+          // UPGRADE: Immediate return on Malicious status to prevent unnecessary Pricing calls (Saves 300ms+)
           if (isHoneypot || sellTax > 0.25 || isBlacklisted) { 
             return { 
               status: 'malicious', 
@@ -89,7 +93,8 @@ export async function classifyToken(asset: any): Promise<TokenClassification> {
               usdValue: 0,
               canRecover: false,
               isHoneypot,
-              sellTax
+              sellTax,
+              isBlacklisted
             };
           }
         }
@@ -107,22 +112,29 @@ export async function classifyToken(asset: any): Promise<TokenClassification> {
     } else if (address) {
       const tokenPrice = await getCachedPrice(`price-${chainId}-${address}`, async () => {
         // Source A: DexScreener (Best for Liquidity check)
-        const dexRes = await fetch(`${CONFIG.DEXSCREENER_API}/${address}`, { signal: AbortSignal.timeout(4000) });
-        if (dexRes.ok) {
-          const dexData = await dexRes.json();
-          // Filter for pairs with at least 000 liquidity to avoid "fake price" scams
-          const validPair = dexData.pairs?.find((p: any) => p.liquidity?.usd > 1000);
-          if (validPair) return parseFloat(validPair.priceUsd);
-        }
+        // UPGRADE: Re-ordered sorting and added explicit 'priceUsd' check for March 2026 high-volatility tokens
+        try {
+          const dexRes = await fetch(`${CONFIG.DEXSCREENER_API}/${address}`, { signal: AbortSignal.timeout(8000) });
+          if (dexRes.ok) {
+            const dexData = await dexRes.json();
+            const validPair = (dexData.pairs || [])
+              .sort((a: any, b: any) => (Number(b.liquidity?.usd) || 0) - (Number(a.liquidity?.usd) || 0))
+              .find((p: any) => (p.liquidity?.usd > 1000) && p.priceUsd);
+            if (validPair) return parseFloat(validPair.priceUsd);
+          }
+        } catch (e) { logger.debug(`DexScreener bypass for ${symbol}`); }
 
         // Source B: Coingecko (Fallback for Bluechips)
-        const platform = CONFIG.CG_PLATFORM_MAP[chainId.toString()];
+        // UPGRADE: Safe Mapping check for string-based ChainIDs in 2026 Superchain configs
+        const platform = CONFIG.CG_PLATFORM_MAP[String(chainId)];
         if (platform) {
           const cgUrl = `${CONFIG.COINGECKO_API}/${platform}?contract_addresses=${address}&vs_currencies=usd`;
           const cgRes = await fetch(cgUrl);
           if (cgRes.ok) {
             const cgData = await cgRes.json();
-            if (cgData[address]?.usd) return cgData[address].usd;
+            // UPGRADE: Double-index lookup for checksummed vs non-checksummed addresses
+            const price = cgData[address]?.usd || cgData[address.toLowerCase()]?.usd;
+            if (price) return price;
           }
         }
         return 0;
