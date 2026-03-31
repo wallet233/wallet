@@ -1,15 +1,14 @@
 import { prisma } from '../../config/database.js';
 import { runSecurityScan, runPriceScan, calculateVerdict } from './spamDetector.js';
 import { logger } from '../../utils/logger.js';
-// Production Integration: Use your healthy provider factory
 import { getHealthyProvider } from '../../blockchain/provider.js';
 import { ethers, isAddress, keccak256, solidityPacked, zeroPadValue } from 'ethers';
 
 /**
- * AEGIS-ENGINE v3.2 (2026 Sovereign Grade)
+ * Spam-ENGINE v3.2 (2026)
  * Core Logic: Autonomous Orchestration, Fingerprint Drift, and Intelligence Lifecycle.
  * Philosophy: Trust the Ledger, Verify the Bytecode, Minimize the Waterfall.
- * Features: Adaptive TTL Scaling, Proxy Evolution Tracking, Institutional SaaS Sync.
+ * Features: Adaptive TTL Scaling, Proxy Evolution Tracking, SaaS Sync.
  * Alignment: Integrated with Object-based Pricing Waterfall.
  */
 
@@ -20,7 +19,7 @@ export class AegisEngine {
    * The "Grand Orchestrator": Processes assets with JIT (Just-In-Time) Verification.
    * Adapts re-scan frequency based on asset risk, code stability, and logic volatility.
    */
-  static async getVerdict(asset: any) { // Upgrade: No longer rely on passed provider
+  static async getVerdict(asset: any) { 
     const address = String(asset.address || '').toLowerCase().trim();
     const chainId = Number(asset.chainId) || 1;
     const id = `${chainId}-${address}`;
@@ -37,7 +36,7 @@ export class AegisEngine {
 
       /**
        * UPGRADE: PERFORMANCE OPTIMIZATION
-       * If record exists and is fresh (within base TTL), skip RPC calls to save rate limits.
+       * If record exists and is fresh (within base TTL), skip RPC calls.
        */
       const now = Date.now();
       if (live) {
@@ -89,7 +88,7 @@ export class AegisEngine {
         const isStale = (now - lastScannedMs) > adaptiveTTL;
 
         // If Malicious: Permanent Block.
-        // If Clean & Intact & Not Stale: Instant return from Supabase.
+        // If Clean & Intact & Not Stale: Instant return from database.
         if (isMalicious || (codeIntact && !isStale)) {
           return live;
         }
@@ -126,7 +125,7 @@ export class AegisEngine {
                 timesScanned: { increment: 1 },
                 isProxy: isProxyContract,
                 isVerifiedSource: verdict.isVerifiedSource || false,
-                // If the fingerprint changed, we increment the upgrade counter for your SaaS data
+                // If the fingerprint changed, we increment the upgrade counter for my SaaS data
                 upgradeCount: hasChanged ? { increment: 1 } : undefined,
                 lastChangeFound: hasChanged ? new Date() : live?.lastChangeFound
               },
@@ -136,7 +135,7 @@ export class AegisEngine {
                 chainId, 
                 ...verdict, 
                 fingerprint: currentFingerprint,
-                initialFingerprint: currentFingerprint, // Set the "Birth" fingerprint
+                initialFingerprint: currentFingerprint,
                 isProxy: isProxyContract,
                 isVerifiedSource: verdict.isVerifiedSource || false,
                 upgradeCount: 0,
@@ -158,7 +157,7 @@ export class AegisEngine {
 
             return updated;
           }, {
-            // Production Upgrade: Standard timeout to prevent orphan hangs
+            //  Upgrade: Standard timeout to prevent orphan hangs
             timeout: 15000
           });
         } catch (dbError: any) {
@@ -185,7 +184,7 @@ export class AegisEngine {
       // PRODUCTION UPGRADE: Fail-Caution instead of Fail-Clean
       // This protects the user if the network/scanners are down.
       return { 
-        status: 'dust', // Set as dust/clean with warning note
+        status: 'dust', // See as dust/clean with warning note
         securityNote: 'Verification Deferred (Sync Conflict)', 
         usdValue: 0,
         score: 0, // Force a low score during failure

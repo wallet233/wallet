@@ -191,7 +191,7 @@ export async function runPriceScan(address: string, symbol: string, chainId: num
     // Fallback: DeFi Llama
     const platform = CONFIG.CG_PLATFORM_MAP[String(chainId)] || 'ethereum';
     const llama = await fetch(`${CONFIG.LLAMA_API}/${platform}:${address}`, { signal: AbortSignal.timeout(4000) }).then(r => r.json());
-    const price = llama.coins?.[`${platform}:${address}`]?.price;
+    const price = llama.coins?.[`platform}:${address}`]?.price;
     if (price) return { price, liquidity: 0 };
   } catch (e) {
     logger.warn(`[Aegis-Price] Trace failed for ${symbol}: ${e instanceof Error ? e.message : 'Timeout'}`);
@@ -217,14 +217,19 @@ export function calculateVerdict(asset: any, security: any, priceData: { price: 
   } else {
     const name = (asset.name || '').toLowerCase();
     const symbol = (asset.symbol || '').toLowerCase();
+    
+    // Sovereign Add: Homoglyph/Lookalike Protection (Catching fake "USDC" using cyrillic chars)
+    const isLookalike = (symbol.includes('с') || name.includes('о') || name.includes('а')) && 
+                        (symbol === 'usdc' || symbol === 'usdt' || symbol === 'eth');
+
     // Production Add: Advanced Phishing Patterns (includes homoglyph-style common spam)
     const spamKeywords = ['visit', 'claim', 'free', 'reward', 'gift', 'voucher', 'airdrop', 'v0uc', 'clm'];
     
-    const hasSpamMetadata = spamKeywords.some(k => name.includes(k) || symbol.includes(k));
+    const hasSpamMetadata = spamKeywords.some(k => name.includes(k) || symbol.includes(k)) || isLookalike;
 
     if (hasSpamMetadata) {
       status = 'spam';
-      note = 'Phishing: Metadata triggers';
+      note = isLookalike ? '🚨 HOMOGLYPH LOOKALIKED DETECTED' : 'Phishing: Metadata triggers';
     } else if (priceData.price === 0) {
       status = 'dust'; // Unpriced assets treated as dust to protect UI
       note = 'System: Zero-Value/Unlisted Asset';
