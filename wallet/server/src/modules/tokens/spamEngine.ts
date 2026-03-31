@@ -4,10 +4,11 @@ import { logger } from '../../utils/logger.js';
 import { ethers, isAddress, keccak256, solidityPacked } from 'ethers';
 
 /**
- * AEGIS-ENGINE v3.1 (2026 Sovereign Grade)
+ * AEGIS-ENGINE v3.2 (2026 Sovereign Grade)
  * Core Logic: Autonomous Orchestration, Fingerprint Drift, and Intelligence Lifecycle.
  * Philosophy: Trust the Ledger, Verify the Bytecode, Minimize the Waterfall.
  * Features: Adaptive TTL Scaling, Proxy Evolution Tracking, Institutional SaaS Sync.
+ * Alignment: Integrated with Object-based Pricing Waterfall.
  */
 
 const IMPLEMENTATION_SLOT = "0x3608944802909281900310020130310202202202202202202202202202202202";
@@ -71,15 +72,16 @@ export class AegisEngine {
       }
 
       // 4. INTELLIGENCE WATERFALL (URL Pings - Only triggered when necessary)
-      const [security, price] = await Promise.all([
+      // Aligned: runPriceScan now returns { price, liquidity }
+      const [security, priceData] = await Promise.all([
         runSecurityScan(address, chainId),
         runPriceScan(address, asset.symbol || '', chainId)
       ]);
 
-      const verdict = calculateVerdict(asset, security, price);
+      const verdict = calculateVerdict(asset, security, priceData);
 
       // 5. ATOMIC SYNC (Live Registry + Master Archive)
-      // UPGRADED: Now populates SaaS metrics (upgradeCount, initialFingerprint, isProxy)
+      // UPGRADED: Now populates SaaS metrics (upgradeCount, initialFingerprint, isProxy, isVerifiedSource)
       return await prisma.$transaction(async (tx: any) => {
         const hasChanged = live && live.fingerprint !== currentFingerprint;
 
@@ -91,6 +93,7 @@ export class AegisEngine {
             lastScanned: new Date(),
             timesScanned: { increment: 1 },
             isProxy: isProxyContract,
+            isVerifiedSource: verdict.isVerifiedSource || false,
             // If the fingerprint changed, we increment the upgrade counter for your SaaS data
             upgradeCount: hasChanged ? { increment: 1 } : undefined,
             lastChangeFound: hasChanged ? new Date() : live?.lastChangeFound
@@ -103,6 +106,7 @@ export class AegisEngine {
             fingerprint: currentFingerprint,
             initialFingerprint: currentFingerprint, // Set the "Birth" fingerprint
             isProxy: isProxyContract,
+            isVerifiedSource: verdict.isVerifiedSource || false,
             upgradeCount: 0,
             timesScanned: 1
           }

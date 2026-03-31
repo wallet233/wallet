@@ -33,6 +33,7 @@ const CONFIG = {
 
 let goPlusAccessToken: string | null = null;
 let tokenExpiry = 0;
+let isRefreshing = false; // Production Add: Prevents auth race conditions
 
 /**
  * Robust Auth: Handles token refresh with race-condition prevention
@@ -41,7 +42,14 @@ async function getGoPlusAuth(): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   if (goPlusAccessToken && now < tokenExpiry) return `Bearer ${goPlusAccessToken}`;
   
+  // Production Add: Singleton lock pattern for auth refresh
+  if (isRefreshing) {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    return goPlusAccessToken ? `Bearer ${goPlusAccessToken}` : '';
+  }
+
   try {
+    isRefreshing = true;
     const appKey = process.env.GOPLUS_APP_KEY || '';
     const appSecret = process.env.GOPLUS_APP_SECRET || '';
     if (!appKey || !appSecret) return '';
@@ -61,6 +69,8 @@ async function getGoPlusAuth(): Promise<string> {
     }
   } catch (e) {
     logger.error(`[Aegis-Auth] Failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
+  } finally {
+    isRefreshing = false;
   }
   return '';
 }
@@ -79,8 +89,11 @@ export async function runSecurityScan(address: string, chainId: number) {
 
   try {
     const auth = await getGoPlusAuth();
+    // Production Add: ChainID validation for Honeypot.is V2
+    const hpUrl = `https://api.honeypot.is/v2/IsHoneypot?address=${address}${chainId ? `&chainID=${chainId}` : ''}`;
+    
     const [hpRes, gpRes] = await Promise.allSettled([
-      fetch(`https://api.honeypot.is/v2/IsHoneypot?address=${address}`, { signal: AbortSignal.timeout(5000) }).then(r => r.json()),
+      fetch(hpUrl, { signal: AbortSignal.timeout(5000) }).then(r => r.json()),
       fetch(`${CONFIG.GOPLUS_API}/token_security/${chainId}?contract_addresses=${address}`, {
         headers: auth ? { 'Authorization': auth } : {},
         signal: AbortSignal.timeout(6000)
@@ -110,6 +123,8 @@ export async function runSecurityScan(address: string, chainId: number) {
         if (s.is_mintable === "1" && s.is_proxy !== "1") note = '🚨 UNRESTRICTED MINTING DETECTED';
         if (s.owner_change_balance === "1") note = '🚨 BALANCE MANIPULATION DETECTED';
         if (s.hidden_owner === "1") note = '🚨 HIDDEN OWNER (SCAM RISK)';
+        // Production Add: Slippage/Tax Warning
+        if (tax > 0.10 && !isHoneypot) note = `⚠️ HIGH SELL TAX DETECTED (${(tax * 100).toFixed(1)}%)`;
       }
     }
   } catch (e) {
@@ -125,14 +140,19 @@ export async function runSecurityScan(address: string, chainId: number) {
  */
 export async function runPriceScan(address: string, symbol: string, chainId: number): Promise<{ price: number, liquidity: number }> {
   const sym = (symbol || '').toLowerCase();
-  if (['eth', 'weth', 'usdc', 'usdt'].includes(sym)) {
-    return { price: sym === 'eth' || sym === 'weth' ? 3500 : 1, liquidity: 999999999 };
+  // Production Add: Expanded Stable/Native Registry
+  const stableAssets = ['eth', 'weth', 'usdc', 'usdt', 'dai', 'bnb', 'matic', 'sol'];
+  if (stableAssets.includes(sym)) {
+    const isStable = ['usdc', 'usdt', 'dai'].includes(sym);
+    return { price: isStable ? 1 : 2500, liquidity: 999999999 };
   }
 
   try {
     // Primary: DexScreener (Real-time Liquidity)
     const dexRes = await fetch(`${CONFIG.DEXSCREENER_API}/${address}`, { signal: AbortSignal.timeout(5000) }).then(r => r.json());
-    const pair = (dexRes.pairs || []).sort((a: any, b: any) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+    const pair = (dexRes.pairs || [])
+      .filter((p: any) => p.quoteToken?.symbol !== symbol) // Filter out self-paired liquidity
+      .sort((a: any, b: any) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
     
     if (pair?.liquidity?.usd > CONFIG.LIQUIDITY_FLOOR) {
       return { price: parseFloat(pair.priceUsd), liquidity: pair.liquidity.usd };
@@ -140,10 +160,12 @@ export async function runPriceScan(address: string, symbol: string, chainId: num
 
     // Fallback: DeFi Llama
     const platform = CONFIG.CG_PLATFORM_MAP[String(chainId)] || 'ethereum';
-    const llama = await fetch(`${CONFIG.LLAMA_API}/${platform}:${address}`).then(r => r.json());
+    const llama = await fetch(`${CONFIG.LLAMA_API}/${platform}:${address}`, { signal: AbortSignal.timeout(4000) }).then(r => r.json());
     const price = llama.coins?.[`${platform}:${address}`]?.price;
     if (price) return { price, liquidity: 0 };
-  } catch (e) {}
+  } catch (e) {
+    logger.warn(`[Aegis-Price] Trace failed for ${symbol}: ${e instanceof Error ? e.message : 'Timeout'}`);
+  }
 
   return { price: 0, liquidity: 0 };
 }
@@ -164,11 +186,18 @@ export function calculateVerdict(asset: any, security: any, priceData: { price: 
     note = security.note !== 'Analyzed Clean' ? security.note : '🚨 MALICIOUS CONTRACT';
   } else {
     const name = (asset.name || '').toLowerCase();
-    const spamKeywords = ['visit', 'claim', 'free', 'reward', 'gift', 'voucher', 'airdrop'];
+    const symbol = (asset.symbol || '').toLowerCase();
+    // Production Add: Advanced Phishing Patterns (includes homoglyph-style common spam)
+    const spamKeywords = ['visit', 'claim', 'free', 'reward', 'gift', 'voucher', 'airdrop', 'v0uc', 'clm'];
     
-    if (spamKeywords.some(k => name.includes(k))) {
+    const hasSpamMetadata = spamKeywords.some(k => name.includes(k) || symbol.includes(k));
+
+    if (hasSpamMetadata) {
       status = 'spam';
       note = 'Phishing: Metadata triggers';
+    } else if (priceData.price === 0) {
+      status = 'dust'; // Unpriced assets treated as dust to protect UI
+      note = 'System: Zero-Value/Unlisted Asset';
     } else if (usdValue < CONFIG.DUST_THRESHOLD) {
       status = 'dust';
     } else if (usdValue > 50 && security.isVerifiedSource && priceData.liquidity > 10000) {
@@ -177,16 +206,19 @@ export function calculateVerdict(asset: any, security: any, priceData: { price: 
     }
   }
 
+  // Final Production Shield: Ensure no negative USD values
+  const finalUsdValue = Math.max(0, Number(usdValue.toFixed(4)));
+
   return {
     status,
     securityNote: note,
-    score: status === 'malicious' ? 0 : (status === 'verified' ? 95 : 70),
-    usdValue: Number(usdValue.toFixed(4)),
+    score: status === 'malicious' ? 0 : (status === 'verified' ? 95 : (status === 'spam' ? 10 : 70)),
+    usdValue: finalUsdValue,
     isHoneypot: security.isHoneypot,
     sellTax: security.tax,
     isProxy: security.isProxy,
     isVerifiedSource: security.isVerifiedSource,
     liquidityUsd: priceData.liquidity,
-    canRecover: status !== 'malicious' && usdValue > 3.50
+    canRecover: status !== 'malicious' && finalUsdValue > 3.50 && !security.blacklisted
   };
 }
