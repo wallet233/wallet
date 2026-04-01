@@ -95,7 +95,11 @@ export function getProvider(rpcOrNetworkOrChainId: string | number, chainIdOverr
     finalChainId = chain.id;
   } else {
     url = rpcOrNetworkOrChainId.startsWith('http') ? rpcOrNetworkOrChainId : getNetworkUrl(rpcOrNetworkOrChainId);
-    const chain = EVM_CHAINS.find(c => c.name.toLowerCase() === rpcOrNetworkOrChainId.toString().toLowerCase());
+    // UPGRADE: Improved search logic to find chain by URL pattern if name match fails
+    const chain = EVM_CHAINS.find(c => 
+      c.name.toLowerCase() === rpcOrNetworkOrChainId.toString().toLowerCase() ||
+      c.rpcs.some(r => url.includes(r.split('//')[1]?.split('/')[0]))
+    );
     if (chain) finalChainId = chain.id;
   }
 
@@ -110,9 +114,9 @@ export function getProvider(rpcOrNetworkOrChainId: string | number, chainIdOverr
       request.setHeader("Accept", "application/json");
         request.setHeader("Content-Type", "application/json");
     
-  // UPGRADE: Ensure staticNetwork is paired with a valid chainId to stop the network detection loop
-  // If finalChainId is missing, we fallback to 1 (Mainnet) or the specific L2 ID if known
-  const provider = new JsonRpcProvider(request, finalChainId || (url.includes('base') ? 8453 : 1), {
+  // UPGRADE: Use the Intelligence Engine's chain discovery instead of hardcoded ternary for Base/Eth
+  // This ensures L2s like Optimism, Arbitrum, and Mantle use their correct IDs automatically.
+  const provider = new JsonRpcProvider(request, finalChainId || 1, {
     staticNetwork: true,
     batchMaxCount: 50,
     batchMaxSize: 2 * 1024 * 1024,
@@ -147,9 +151,16 @@ export async function getHealthyProvider(network: string | number): Promise<Json
       if (!block || !block.number) throw new Error('RPC_RETURNED_EMPTY_BLOCK');
       
       const secondsSinceLastBlock = Math.floor(Date.now() / 1000) - block.timestamp;
-      // Stricter staleness for high-performance L2s
-      if (secondsSinceLastBlock > 180) {
-        throw new Error(`RPC_STALE: Node is ${secondsSinceLastBlock}s behind`);
+      
+      // UPGRADE: Dynamically look up block time for the chain to determine staleness threshold
+      let threshold = 180; 
+      try {
+        const chain = EVM_CHAINS.find(c => c.rpcs.some(r => targetUrl.includes(r.split('//')[1]?.split('/')[0])));
+        if (chain) threshold = Math.max(chain.blockTimeSec * 10, 60); // 10 blocks or 1 minute minimum
+      } catch (e) { /* fallback to 180 */ }
+
+      if (secondsSinceLastBlock > threshold) {
+        throw new Error(`RPC_STALE: Node is ${secondsSinceLastBlock}s behind (Threshold: ${threshold}s)`);
       }
 
       return true;
@@ -166,7 +177,7 @@ export async function getHealthyProvider(network: string | number): Promise<Json
       lastFailure: Date.now() 
     });
 
-    // 2. Trigger RPC Refresh in the Intelligence Engine if we fail
+    // Trigger RPC Refresh in the Intelligence Engine if we fail
     if (typeof network === 'number') {
       logger.info(`[Provider] Force refreshing RPC candidates for chain ${network}`);
       const freshUrl = await refreshRpc(network);
