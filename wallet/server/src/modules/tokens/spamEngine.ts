@@ -11,6 +11,23 @@ import { ethers, isAddress, keccak256, solidityPacked, zeroPadValue } from 'ethe
  * Features: Adaptive TTL Scaling, Proxy Evolution Tracking, SaaS Sync.
  * Alignment: Integrated with Object-based Pricing Waterfall & multi-RPC Resolver.
  */
+const RPC_CONCURRENCY = 5; 
+let activeRpcCalls = 0;
+const rpcQueue: (() => void)[] = [];
+
+async function acquireRpcSlot() {
+if (activeRpcCalls >= RPC_CONCURRENCY) {
+await new Promise<void>(resolve => rpcQueue.push(resolve));
+}
+activeRpcCalls++;
+}
+function releaseRpcSlot() {
+activeRpcCalls--;
+if (rpcQueue.length > 0) {
+const next = rpcQueue.shift();
+if (next) next();
+}
+}
 
 const IMPLEMENTATION_SLOT = "0x3608944802909281900310020130310202202202202202202202202202202202";
 
@@ -64,6 +81,7 @@ export class AegisEngine {
       let rawProxy: string | null;
 
       try {
+        await acquireRpcSlot();
         [onChainCode, rawProxy] = await Promise.all([
           provider.getCode(address).catch(() => '0x'),
           provider.getStorage(address, IMPLEMENTATION_SLOT).catch(() => '0x00')
@@ -72,7 +90,9 @@ export class AegisEngine {
         // If the specific provider fails, trigger a refresh for the next iteration
         await refreshRpc(chainId);
         throw rpcErr;
-      }
+      } finally {
+          releaseRpcSlot(); 
+          }
       
       // UPGRADE: GATEKEEPER - Verify if address is a Contract or a regular Wallet (EOA)
       const isContract = onChainCode !== '0x' && onChainCode !== '0x0' && onChainCode !== null;
