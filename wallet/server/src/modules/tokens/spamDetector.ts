@@ -8,6 +8,7 @@ import unidecode from 'unidecode';
  * AEGIS-INTELLIGENCE v5.8 (2026 Enterprise SaaS Edition) - MASTER CONSENSUS
  * Core Logic: High-Fidelity Security Analytics & Pricing Waterfall
  * Status: Production-Hardened with Multi-Provider Redundancy & WAF-Shielding
+ * Alignment: Fully synchronized with Aegis-Sovereign v3.2
  */
 const API_CONCURRENCY = 15;
 let activeApiCalls = 0;
@@ -44,6 +45,9 @@ export interface TokenClassification {
   isVerifiedSource?: boolean;
   liquidityUsd?: number;
   canRecover: boolean;
+  // UPGRADE: Logic Drift & SaaS Risk Metadata
+  logicDriftScore?: number;
+  isShadowProxy?: boolean;
 }
 
 const CONFIG = {
@@ -118,7 +122,6 @@ async function getGoPlusAuth(): Promise<string> {
  * Intelligent Security Waterfall: Multi-Provider Redundancy
  * Hardened for Production Finance with Honeypot.is V2 simulation consensus.
  */
-
 export async function runSecurityScan(address: string, chainId: number) {
   const cacheKey = `${chainId}:${address.toLowerCase()}`;
   const now = Date.now();
@@ -128,6 +131,7 @@ export async function runSecurityScan(address: string, chainId: number) {
   }
   let isHoneypot = false; let tax = 0; let note = 'Analyzed Clean';
   let blacklisted = false; let isProxy = false; let isVerifiedSource = false;
+  let logicDriftScore = 0; // UPGRADE: Track behavioral changes
 
   try {
     const auth = await getGoPlusAuth();
@@ -161,6 +165,11 @@ export async function runSecurityScan(address: string, chainId: number) {
         isVerifiedSource = s.is_open_source === "1";
         tax = Math.max(tax, parseFloat(s.sell_tax || "0") / 100);
         
+        // UPGRADE: Logic Drift & Shadow Proxy Analysis
+        if (isProxy && !isVerifiedSource) logicDriftScore += 0.75;
+        if (s.can_take_back_ownership === "1") logicDriftScore += 0.2;
+        if (s.is_mintable === "1" && s.is_proxy === "1") logicDriftScore += 0.15;
+
         if (s.is_mintable === "1" && s.is_proxy !== "1") note = '🚨 UNRESTRICTED MINTING DETECTED';
         if (s.owner_change_balance === "1") note = '🚨 BALANCE MANIPULATION DETECTED';
         if (s.hidden_owner === "1") note = '🚨 HIDDEN OWNER (SCAM RISK)';
@@ -174,7 +183,7 @@ export async function runSecurityScan(address: string, chainId: number) {
 releaseApiSlot();
 }
 
- const result = { isHoneypot, tax, note, blacklisted, isProxy, isVerifiedSource };
+ const result = { isHoneypot, tax, note, blacklisted, isProxy, isVerifiedSource, logicDriftScore };
 
  SECURITY_CACHE[cacheKey] = {
  data: result,
@@ -188,6 +197,7 @@ releaseApiSlot();
 
  return result;
 }
+
 /**
  * Native Oracle: Restored Memory Safety cache
  */
@@ -209,7 +219,6 @@ async function getLiveNativePrice(nativePriceId: string): Promise<number> {
 /**
  * Pricing Waterfall: Restored High-Liquidity Pairing + Redundant Oracles
  */
-
 export async function runPriceScan(address: string, symbol: string, chainId: number): Promise<{ price: number, liquidity: number }> {
 const cacheKey = `${chainId}:${address.toLowerCase()}`;
 const now = Date.now();
@@ -297,7 +306,9 @@ export function calculateVerdict(asset: any, security: any, priceData: { price: 
   const balance = new Decimal(asset?.balance || '0');
   const price = new Decimal(priceData?.price || 0);
   const usdValue = balance.times(price);
-  const isMalicious = security?.isHoneypot || security?.tax > 0.40 || security?.blacklisted;
+  
+  // UPGRADE: Integrated Logic Drift Threshold for Malicious Verdicts
+  const isMalicious = security?.isHoneypot || security?.tax > 0.40 || security?.blacklisted || (security?.logicDriftScore >= 0.8);
   
   // RESTORED: NFKC Normalization + Invisible Char Detection
   const rawSymbol = (asset?.symbol || '').trim();
@@ -316,7 +327,8 @@ export function calculateVerdict(asset: any, security: any, priceData: { price: 
 
   if (isMalicious) {
     status = 'malicious';
-    note = note !== 'Analyzed Clean' ? note : '🚨 MALICIOUS CONTRACT';
+    // UPGRADE: Specific note for logic drift detections
+    note = (security?.logicDriftScore >= 0.8 && note === 'Analyzed Clean') ? '🚨 MALICIOUS LOGIC DRIFT DETECTED' : (note !== 'Analyzed Clean' ? note : '🚨 MALICIOUS CONTRACT');
   } else if (hasSpamMetadata) {
     status = 'spam';
     note = isLookalike ? `🚨 IDENTITY SPOOF: ${flatSymbol.toUpperCase()}` : 'Phishing: Metadata triggers';
@@ -344,6 +356,7 @@ export function calculateVerdict(asset: any, security: any, priceData: { price: 
     isHoneypot: security?.isHoneypot, sellTax: security?.tax,
     isProxy: security?.isProxy, isVerifiedSource: security?.isVerifiedSource,
     liquidityUsd: priceData.liquidity,
-    canRecover: status !== 'malicious' && status !== 'spam' && finalUsdValue > 5.00 && !security?.blacklisted
+    canRecover: status !== 'malicious' && status !== 'spam' && finalUsdValue > 5.00 && !security?.blacklisted,
+    logicDriftScore: security?.logicDriftScore // UPGRADE: Export metric to controller
   };
 }

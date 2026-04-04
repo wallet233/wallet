@@ -3,13 +3,16 @@ import { isAddress, getAddress } from 'ethers';
 import { tokenService } from './token.service.js';
 import { logger } from '../../utils/logger.js';
 import crypto from 'crypto';
-import Decimal from 'decimal.js';
+import DecimalModule from 'decimal.js';
+
+// FIX TS(2351): Safe constructor resolution for Decimal.js across ESM/CJS
+const Decimal = (DecimalModule as any).default || DecimalModule;
 
 /**
  * UPGRADED: Aegis-Sovereign Token Controller v3.2 (2026) - PRODUCTION HARDENED
  * Features: Request Timeout guards, Logic Drift Analytics, 
  * Institutional Risk Reporting, and SaaS-aligned Metadata.
- * Alignment: Fully synchronized with Aegis-Engine v3.2 and SpamDetector v3.0.
+ * Alignment: Fully synchronized with Aegis-Engine v3.2 and SpamDetector v5.8.
  */
 export async function scanTokensController(req: Request, res: Response) {
   // 1. UNIFIED INPUT & TRACEABILITY
@@ -66,15 +69,17 @@ export async function scanTokensController(req: Request, res: Response) {
       
       // Categorize Security Status (Aligned with TokenClassification)
       // UPGRADE: Added 'honeypot' and 'drainer' detection hooks from SpamDetector v3.0
-      if (asset.status === 'malicious' || asset.classification?.isHoneypot) acc.maliciousCount++;
+      // Logic: Explicit check for high logicDriftScore (>= 0.8) as a malicious trigger
+      if (asset.status === 'malicious' || asset.classification?.isHoneypot || (asset.classification?.logicDriftScore >= 0.8)) acc.maliciousCount++;
       else if (asset.status === 'spam' || asset.classification?.isSpam) acc.spamCount++;
       else if (asset.status === 'verified') acc.verifiedCount++;
       else acc.cleanCount++;
 
       // SaaS Metrics: Identify systemic risks in the wallet
       // UPGRADE: Link to logicDrift score calculated in SpamEngine
-      if (asset.isProxy || asset.classification?.isProxy) acc.proxyCount++;
-      if (asset.upgradeCount > 0 || asset.classification?.logicDriftScore > 0.7) acc.driftCount++;
+      if (asset.isProxy || asset.classification?.isProxy || asset.classification?.isShadowProxy) acc.proxyCount++;
+      // UPGRADE: Advanced Behavioral Drift Detection (Threshold 0.7 for warning, 0.8 for high risk)
+      if (asset.upgradeCount > 0 || asset.classification?.logicDriftScore > 0.7 || asset.classification?.isShadowProxy) acc.driftCount++;
 
       return acc;
     }, { 
@@ -105,7 +110,8 @@ export async function scanTokensController(req: Request, res: Response) {
       wallet: {
         address: checksummedAddress,
         label: 'Sovereign Protected Wallet',
-        securityLevel: analytics.maliciousCount > 0 ? 'COMPROMISED' : 'PROTECTED'
+        // UPGRADE: Composite security level check including high-drift anomalies
+        securityLevel: (analytics.maliciousCount > 0 || analytics.driftCount > 5) ? 'COMPROMISED' : (analytics.driftCount > 0 ? 'WARNING' : 'PROTECTED')
       },
       summary: {
         assetCount: report.length,
@@ -118,8 +124,9 @@ export async function scanTokensController(req: Request, res: Response) {
         riskMetrics: {
           proxyContracts: analytics.proxyCount,
           logicDriftsDetected: analytics.driftCount, // Critical for SaaS upsell
+          // UPGRADE: Dynamic Risk Scoring based on drift density
           riskScore: analytics.maliciousCount > 0 ? 'HIGH' : (analytics.driftCount > 0 ? 'MEDIUM' : 'LOW'),
-          recommendation: analytics.maliciousCount > 0 ? 'IMMEDIATE_ACTION_REQUIRED' : 'NO_THREATS_DETECTED'
+          recommendation: analytics.maliciousCount > 0 ? 'IMMEDIATE_ACTION_REQUIRED' : (analytics.driftCount > 0 ? 'REVIEW_PROXY_PERMISSIONS' : 'NO_THREATS_DETECTED')
         },
         totalUsdValue: Number(analytics.totalUsdValue.toFixed(2)),
         breakdown: {
