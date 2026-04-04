@@ -164,11 +164,12 @@ PRICE_CACHE[cacheKey] = { data: priceData, expiry: now + CACHE_TTL };
       // 4. INTELLIGENCE WATERFALL (URL Pings - Only triggered when necessary)
       // Aligned: runPriceScan now returns { price, liquidity }
       // UPGRADE: Integrated Weighted Consensus via runSecurityScan multi-provider support
-      const [security, priceData] = await Promise.all([
+
+  /*    const [security, priceData] = await Promise.all([
         runSecurityScan(address, chainId),
         runPriceScan(address, asset.symbol || '', chainId)
       ]);
-
+  */
       const verdict = calculateVerdict(asset, security, priceData);
 
       // UPGRADE: BYPASS PERSISTENCE for non-contract addresses to prevent DB bloat
