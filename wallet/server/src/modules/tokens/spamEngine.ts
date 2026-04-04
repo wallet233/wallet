@@ -33,7 +33,7 @@ export class AegisEngine {
       // 1. DATABASE MEMORY RETRIEVAL (Table 2: LiveRegistry)
       // Fetches the current 'known' state from the Mesh.
       const live = await prisma.securityLiveRegistry.findUnique({ where: { id } });
-
+  
       /**
        * UPGRADE: PERFORMANCE OPTIMIZATION
        * If record exists and is fresh (within base TTL), skip RPC calls.
@@ -50,7 +50,13 @@ export class AegisEngine {
       // 2. BLOCKCHAIN REALITY CHECK (RPC Fingerprinting)
       // Production Upgrade: Relying on getBestRpc for latency-optimized provider resolution
       const rpcUrl = await getBestRpc(chainId);
-      const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
+      
+      /**
+       * UPGRADE: PRODUCTION STATIC NETWORK HANDSHAKE
+       * Explicitly passing chainId and staticNetwork: true prevents 'eth_chainId' 
+       * round-trips that cause 403/Unauthorized errors under heavy load.
+       */
+      const provider = new ethers.JsonRpcProvider(rpcUrl, chainId, { staticNetwork: true });
 
       // We hash the bytecode + proxy implementation to detect logic shifts instantly.
       // PRODUCTION FIX: Logic remains, but note that for massive scale, Multicall batching is recommended here.

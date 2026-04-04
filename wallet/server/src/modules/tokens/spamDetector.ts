@@ -143,7 +143,6 @@ export async function runSecurityScan(address: string, chainId: number) {
 
   return { isHoneypot, tax, note, blacklisted, isProxy, isVerifiedSource };
 }
-
 /**
  * Native Oracle: Restored Memory Safety cache
  */
