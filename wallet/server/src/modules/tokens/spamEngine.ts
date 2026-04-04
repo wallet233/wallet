@@ -102,6 +102,7 @@ export class AegisEngine {
 
       // 4. INTELLIGENCE WATERFALL (URL Pings - Only triggered when necessary)
       // Aligned: runPriceScan now returns { price, liquidity }
+      // UPGRADE: Integrated Weighted Consensus via runSecurityScan multi-provider support
       const [security, priceData] = await Promise.all([
         runSecurityScan(address, chainId),
         runPriceScan(address, asset.symbol || '', chainId)

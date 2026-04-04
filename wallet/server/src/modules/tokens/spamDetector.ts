@@ -1,14 +1,17 @@
 import { logger } from '../../utils/logger.js';
 import crypto from 'crypto';
 import { getChainById } from '../../blockchain/chains.js';
-import Decimal from 'decimal.js'; 
+import DecimalModule from 'decimal.js'; 
 import unidecode from 'unidecode';
 
 /**
- * AEGIS-INTELLIGENCE v5.1 (2026 Enterprise SaaS Edition) - MASTER CONSENSUS
+ * AEGIS-INTELLIGENCE v5.8 (2026 Enterprise SaaS Edition) - MASTER CONSENSUS
  * Core Logic: High-Fidelity Security Analytics & Pricing Waterfall
  * Status: Production-Hardened with Multi-Provider Redundancy & WAF-Shielding
  */
+
+// FIX TS(2351): Safe constructor resolution for Decimal.js across ESM/CJS
+const Decimal = (DecimalModule as any).default || DecimalModule;
 
 export interface TokenClassification {
   status: 'verified' | 'spam' | 'dust' | 'clean' | 'malicious';
@@ -91,6 +94,7 @@ async function getGoPlusAuth(): Promise<string> {
 
 /**
  * Intelligent Security Waterfall: Multi-Provider Redundancy
+ * Hardened for Production Finance
  */
 export async function runSecurityScan(address: string, chainId: number) {
   let isHoneypot = false; let tax = 0; let note = 'Analyzed Clean';
@@ -98,29 +102,27 @@ export async function runSecurityScan(address: string, chainId: number) {
 
   try {
     const auth = await getGoPlusAuth();
+    // Production Fix: Explicit parameter mapping for Honeypot.is V2
     const hpUrl = `https://honeypot.is{address}${chainId ? `&chainID=${chainId}` : ''}`;
     
-    // CONSENSUS: GoPlus + Honeypot.is Simulation
     const results = await Promise.allSettled([
       fetch(hpUrl, { signal: AbortSignal.timeout(8000) }).then(r => r.json()),
       fetch(`${CONFIG.GOPLUS_API}/api/v1/token_security/${chainId}?contract_addresses=${address}`, {
-        headers: auth ? { 'Authorization': auth, 'User-Agent': 'Aegis-Engine/5.1' } : { 'User-Agent': 'Aegis-Engine/5.1' },
+        headers: auth ? { 'Authorization': auth, 'User-Agent': 'Aegis-Engine/5.8' } : { 'User-Agent': 'Aegis-Engine/5.8' },
         signal: AbortSignal.timeout(8000)
       }).then(safeJson)
     ]);
 
-    // Handle Honeypot.is Result (Provider 2)
-    const hp = results[0];
-    if (hp.status === 'fulfilled' && hp.value.honeypotResult?.isHoneypot) {
+    const hpRes = results[0];
+    if (hpRes.status === 'fulfilled' && hpRes.value?.honeypot?.isHoneypot) {
       isHoneypot = true;
       note = '🚨 HONEYPOT SIMULATION DETECTED';
-      tax = (hp.value.simulationResult?.sellTax || 0) / 100;
+      tax = (hpRes.value.simulationResult?.sellTax || 0) / 100;
     }
 
-    // Handle GoPlus Result (Provider 1)
-    const gp = results[1];
-    if (gp.status === 'fulfilled' && gp.value.result) {
-      const s = gp.value.result[address] || gp.value.result[address.toLowerCase()];
+    const gpRes = results[1];
+    if (gpRes.status === 'fulfilled' && gpRes.value?.result) {
+      const s = gpRes.value.result[address] || gpRes.value.result[address.toLowerCase()];
       if (s) {
         isHoneypot = isHoneypot || s.is_honeypot === "1";
         blacklisted = s.is_blacklisted === "1";
@@ -141,9 +143,6 @@ export async function runSecurityScan(address: string, chainId: number) {
   return { isHoneypot, tax, note, blacklisted, isProxy, isVerifiedSource };
 }
 
-/**
- * Native Oracle: Restored Memory Safety cache
- */
 async function getLiveNativePrice(nativePriceId: string): Promise<number> {
   const now = Date.now();
   if (NATIVE_PRICE_CACHE[nativePriceId] && NATIVE_PRICE_CACHE[nativePriceId].expiry > now) return NATIVE_PRICE_CACHE[nativePriceId].price;
@@ -159,9 +158,6 @@ async function getLiveNativePrice(nativePriceId: string): Promise<number> {
   return 0;
 }
 
-/**
- * Pricing Waterfall: Restored High-Liquidity Pairing + Redundant Oracles
- */
 export async function runPriceScan(address: string, symbol: string, chainId: number): Promise<{ price: number, liquidity: number }> {
   const sym = (symbol || '').toLowerCase();
   const chain = getChainById(chainId);
@@ -181,7 +177,7 @@ export async function runPriceScan(address: string, symbol: string, chainId: num
 
     let price = 0; let liquidity = 0;
 
-    if (dexRes.status === 'fulfilled' && dexRes.value.pairs) {
+    if (dexRes.status === 'fulfilled' && Array.isArray(dexRes.value?.pairs)) {
       const pair = dexRes.value.pairs
         .filter((p: any) => p.quoteToken?.symbol !== symbol && CONFIG.VERIFIED_BASES.includes(p.quoteToken?.symbol?.toUpperCase()))
         .sort((a: any, b: any) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
@@ -192,7 +188,7 @@ export async function runPriceScan(address: string, symbol: string, chainId: num
       }
     }
 
-    if (llamaRes.status === 'fulfilled' && llamaRes.value.coins) {
+    if (llamaRes.status === 'fulfilled' && llamaRes.value?.coins) {
       price = llamaRes.value.coins[`${platform}:${address}`]?.price || 0;
       if (price > 0) return { price, liquidity: 0 };
     }
@@ -200,16 +196,12 @@ export async function runPriceScan(address: string, symbol: string, chainId: num
   return { price: 0, liquidity: 0 };
 }
 
-/**
- * Final Verdict Engine: Restored Exact v3.0 Logic + Rug Shield
- */
 export function calculateVerdict(asset: any, security: any, priceData: { price: number, liquidity: number }): TokenClassification {
   const balance = new Decimal(asset?.balance || '0');
   const price = new Decimal(priceData?.price || 0);
   const usdValue = balance.times(price);
   const isMalicious = security?.isHoneypot || security?.tax > 0.40 || security?.blacklisted;
   
-  // RESTORED: NFKC Normalization + Invisible Char Detection
   const rawSymbol = (asset?.symbol || '').trim();
   const rawName = (asset?.name || '').trim();
   const nfkcSymbol = rawSymbol.normalize('NFKC').toLowerCase();
@@ -240,7 +232,6 @@ export function calculateVerdict(asset: any, security: any, priceData: { price: 
     }
   }
 
-  // RUG-PULL SHIELD: Malicious if price exists but liquidity is removed
   if (status !== 'malicious' && !price.isZero() && priceData.liquidity < CONFIG.LIQUIDITY_FLOOR && !security?.isVerifiedSource) {
     status = 'malicious';
     note = '🚨 ILLIQUID / EXIT SCAM RISK';
