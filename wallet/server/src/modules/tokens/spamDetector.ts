@@ -9,7 +9,7 @@ import unidecode from 'unidecode';
  * Core Logic: High-Fidelity Security Analytics & Pricing Waterfall
  * Status: Production-Hardened with Multi-Provider Redundancy & WAF-Shielding
  */
-const API_CONCURRENCY = 5; // max parallel external API calls
+const API_CONCURRENCY = 15;
 let activeApiCalls = 0;
 const apiQueue: (() => void)[] = [];
 
@@ -121,7 +121,7 @@ export async function runSecurityScan(address: string, chainId: number) {
   try {
     const auth = await getGoPlusAuth();
     // Production Fix: Use current Honeypot.is API V2 endpoint and parameter mapping
-    const hpUrl = `https://honeypot.is{address}${chainId ? `&chainID=${chainId}` : ''}`;
+  const hpUrl = `https://api.honeypot.is/v2/IsHoneypot?address=${address}${chainId ? `&chainID=${chainId}` : ''}`;
     
     // CONSENSUS: GoPlus (Static) + Honeypot.is (Simulation)
     await acquireApiSlot();
